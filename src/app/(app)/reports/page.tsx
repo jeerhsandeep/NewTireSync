@@ -70,6 +70,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
+import { auth, db } from "@/lib/firebaseConfig";
+import { onAuthStateChanged } from "firebase/auth";
 
 // Mock sales data for demonstration
 const mockSales: SaleTransaction[] = [
@@ -213,9 +216,54 @@ export default function ReportsPage() {
     currentCustomerCommandInputValue,
     setCurrentCustomerCommandInputValue,
   ] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<SaleTransaction | null>(
+    null
+  );
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    setSalesData(mockSales);
+    const fetchSalesData = async (userEmail: string) => {
+      setIsLoading(true);
+      try {
+        const salesCollection = collection(db, "sales", userEmail, "userSales");
+        const querySnapshot = await getDocs(salesCollection);
+
+        const sales = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          timestamp: doc.data().timestamp.toDate(), // Convert Firestore timestamp to JS Date
+        })) as SaleTransaction[];
+
+        setSalesData(sales);
+      } catch (error) {
+        console.error("Error fetching sales data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch sales data.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const userEmail = user.email || "unknown_user";
+        fetchSalesData(userEmail);
+      } else {
+        setSalesData([]);
+        toast({
+          title: "Error",
+          description: "User is not authenticated.",
+          variant: "destructive",
+        });
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const uniqueCustomers = useMemo(() => {
@@ -305,406 +353,571 @@ export default function ReportsPage() {
     setCustomerSearchPopoverOpen(false);
   };
 
-  const handleDeleteSale = (saleId: string) => {
-    const saleToDelete = salesData.find((s) => s.id === saleId);
-    setSalesData((prev) => prev.filter((s) => s.id !== saleId));
-    toast({
-      title: "Sale Deleted",
-      description: `Sale transaction ${saleId.substring(
-        0,
-        8
-      )}... has been deleted.`,
-      variant: "destructive",
-    });
+  const handleDeleteSale = (sale: SaleTransaction) => {
+    setSaleToDelete(sale);
+    setIsConfirmModalOpen(true); // Open the confirmation modal
+  };
+
+  const confirmDeleteSale = async () => {
+    if (!saleToDelete) return;
+
+    setIsDeleting(true); // Start loading
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "User is not authenticated.",
+          variant: "destructive",
+        });
+        setIsDeleting(false);
+        return;
+      }
+
+      const userEmail = user.email || "unknown_user";
+      const saleDocRef = doc(
+        db,
+        "sales",
+        userEmail,
+        "userSales",
+        saleToDelete.id
+      );
+
+      // Delete the sale from Firestore
+      await deleteDoc(saleDocRef);
+
+      // Update local state
+      setSalesData((prev) => prev.filter((s) => s.id !== saleToDelete.id));
+
+      toast({
+        title: "Sale Deleted",
+        description: `Sale transaction ${saleToDelete.id.substring(
+          0,
+          8
+        )}... has been deleted.`,
+        variant: "destructive",
+      });
+    } catch (error) {
+      console.error("Error deleting sale:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete the sale.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setIsConfirmModalOpen(false);
+      setSaleToDelete(null);
+    }
   };
 
   return (
-    <TooltipProvider>
-      <div className="space-y-6">
-        <CardHeader className="px-0">
-          <CardTitle>Profit & Sales Reports</CardTitle>
-          <CardDescription>
-            Analyze your business performance. Select a date range or search by
-            customer to filter results.
-          </CardDescription>
-        </CardHeader>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Filter Reports</CardTitle>
+    <>
+      <TooltipProvider>
+        <div className="space-y-6">
+          <CardHeader className="px-0">
+            <CardTitle>Profit & Sales Reports</CardTitle>
+            <CardDescription>
+              Analyze your business performance. Select a date range or search
+              by customer to filter results.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-end">
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-full sm:w-[240px] justify-start text-left font-normal",
-                      !dateRange.from && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.from ? (
-                      format(dateRange.from, "PPP")
-                    ) : (
-                      <span>Pick a start date</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={dateRange.from}
-                    onSelect={(date) =>
-                      setDateRange((prev) => ({
-                        ...prev,
-                        from: date || undefined,
-                      }))
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <span className="text-muted-foreground hidden sm:inline">-</span>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-full sm:w-[240px] justify-start text-left font-normal",
-                      !dateRange.to && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.to ? (
-                      format(dateRange.to, "PPP")
-                    ) : (
-                      <span>Pick an end date</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={dateRange.to}
-                    onSelect={(date) =>
-                      setDateRange((prev) => ({
-                        ...prev,
-                        to: date || undefined,
-                      }))
-                    }
-                    disabled={(date) =>
-                      dateRange.from ? date < dateRange.from : false
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="flex-grow">
-              <Label
-                htmlFor="customerSearchCombobox"
-                className="block mb-1 text-sm font-medium"
-              >
-                Search by Customer
-              </Label>
-              <Popover
-                open={customerSearchPopoverOpen}
-                onOpenChange={setCustomerSearchPopoverOpen}
-              >
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={customerSearchPopoverOpen}
-                    id="customerSearchCombobox"
-                    className="w-full justify-between mt-1"
-                  >
-                    <div className="flex items-center">
-                      <UserSearch className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      {selectedCustomerDisplayName || "Select a customer..."}
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="Search by name or phone..."
-                      value={currentCustomerCommandInputValue}
-                      onValueChange={(value) => {
-                        setCurrentCustomerCommandInputValue(value);
-                        // If user clears input, deselect customer
-                        if (!value.trim()) {
-                          setCustomerSearchTerm("");
-                          setSelectedCustomerDisplayName("");
-                        }
-                      }}
-                    />
-                    <CommandEmpty>No customer found.</CommandEmpty>
-                    <CommandList>
-                      <CommandGroup>
-                        {uniqueCustomers
-                          .filter(
-                            (customer) =>
-                              customer.contactNumber.includes(
-                                currentCustomerCommandInputValue
-                              ) ||
-                              customer.customerName
-                                .toLowerCase()
-                                .includes(
-                                  currentCustomerCommandInputValue.toLowerCase()
-                                )
-                          )
-                          .map((customer) => (
-                            <CommandItem
-                              key={customer.contactNumber}
-                              value={`${customer.customerName} ${customer.contactNumber}`}
-                              onSelect={() => handleSelectCustomer(customer)}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  customerSearchTerm === customer.contactNumber
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <div>
-                                <div>{customer.customerName}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {customer.contactNumber}
-                                </div>
-                              </div>
-                            </CommandItem>
-                          ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-            <Button
-              variant="ghost"
-              onClick={handleClearFilters}
-              className="w-full lg:w-auto"
-            >
-              <FilterX className="mr-2 h-4 w-4" />
-              Clear All Filters
-            </Button>
-          </CardContent>
-        </Card>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Revenue
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle>Filter Reports</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                ${totalRevenue.toFixed(2)}
+            <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full sm:w-[240px] justify-start text-left font-normal",
+                        !dateRange.from && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange.from ? (
+                        format(dateRange.from, "PPP")
+                      ) : (
+                        <span>Pick a start date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.from}
+                      onSelect={(date) =>
+                        setDateRange((prev) => ({
+                          ...prev,
+                          from: date || undefined,
+                        }))
+                      }
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <span className="text-muted-foreground hidden sm:inline">
+                  -
+                </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full sm:w-[240px] justify-start text-left font-normal",
+                        !dateRange.to && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange.to ? (
+                        format(dateRange.to, "PPP")
+                      ) : (
+                        <span>Pick an end date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateRange.to}
+                      onSelect={(date) =>
+                        setDateRange((prev) => ({
+                          ...prev,
+                          to: date || undefined,
+                        }))
+                      }
+                      disabled={(date) =>
+                        dateRange.from ? date < dateRange.from : false
+                      }
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
+              <div className="flex-grow">
+                <Label
+                  htmlFor="customerSearchCombobox"
+                  className="block mb-1 text-sm font-medium"
+                >
+                  Search by Customer
+                </Label>
+                <Popover
+                  open={customerSearchPopoverOpen}
+                  onOpenChange={setCustomerSearchPopoverOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={customerSearchPopoverOpen}
+                      id="customerSearchCombobox"
+                      className="w-full justify-between mt-1"
+                    >
+                      <div className="flex items-center">
+                        <UserSearch className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        {selectedCustomerDisplayName || "Select a customer..."}
+                      </div>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command>
+                      <CommandInput
+                        placeholder="Search by name or phone..."
+                        value={currentCustomerCommandInputValue}
+                        onValueChange={(value) => {
+                          setCurrentCustomerCommandInputValue(value);
+                          // If user clears input, deselect customer
+                          if (!value.trim()) {
+                            setCustomerSearchTerm("");
+                            setSelectedCustomerDisplayName("");
+                          }
+                        }}
+                      />
+                      <CommandEmpty>No customer found.</CommandEmpty>
+                      <CommandList>
+                        <CommandGroup>
+                          {uniqueCustomers
+                            .filter(
+                              (customer) =>
+                                customer.contactNumber.includes(
+                                  currentCustomerCommandInputValue
+                                ) ||
+                                customer.customerName
+                                  .toLowerCase()
+                                  .includes(
+                                    currentCustomerCommandInputValue.toLowerCase()
+                                  )
+                            )
+                            .map((customer) => (
+                              <CommandItem
+                                key={customer.contactNumber}
+                                value={`${customer.customerName} ${customer.contactNumber}`}
+                                onSelect={() => handleSelectCustomer(customer)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    customerSearchTerm ===
+                                      customer.contactNumber
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                <div>
+                                  <div>{customer.customerName}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {customer.contactNumber}
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={handleClearFilters}
+                className="w-full lg:w-auto"
+              >
+                <FilterX className="mr-2 h-4 w-4" />
+                Clear All Filters
+              </Button>
             </CardContent>
           </Card>
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Revenue
+                </CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${totalRevenue.toFixed(2)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Profit
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${totalProfit.toFixed(2)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Avg. Profit Margin
+                </CardTitle>
+                <Percent className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {averageProfitMargin.toFixed(2)}%
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Sales
+                </CardTitle>
+                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalSalesCount}</div>
+              </CardContent>
+            </Card>
+          </div>
+
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Profit
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle>Daily Sales Performance</CardTitle>
+              <CardDescription>
+                Revenue and Profit for the selected period and customer.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                ${totalProfit.toFixed(2)}
-              </div>
+              {isLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <svg
+                    className="animate-spin h-8 w-8 text-primary"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                </div>
+              ) : salesByDay.length > 0 ? (
+                <ChartContainer
+                  config={chartConfig}
+                  className="h-[300px] w-full"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={salesByDay}
+                      margin={{ top: 5, right: 20, left: -20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={(value) =>
+                          new Date(value + "T00:00:00").toLocaleDateString(
+                            "en-US",
+                            { month: "short", day: "numeric" }
+                          )
+                        }
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        tickFormatter={(value) => `$${value}`}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <ChartTooltip
+                        cursor={false}
+                        content={
+                          <ChartTooltipContent
+                            indicator="dot"
+                            labelFormatter={(label, payload) => {
+                              if (
+                                payload &&
+                                payload.length > 0 &&
+                                payload[0].payload.date
+                              ) {
+                                return new Date(
+                                  payload[0].payload.date + "T00:00:00"
+                                ).toLocaleDateString("en-US", {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                });
+                              }
+                              return label;
+                            }}
+                          />
+                        }
+                      />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      <Bar
+                        dataKey="revenue"
+                        fill="var(--color-revenue)"
+                        radius={4}
+                      />
+                      <Bar
+                        dataKey="profit"
+                        fill="var(--color-profit)"
+                        radius={4}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              ) : (
+                <p className="py-4 text-center text-muted-foreground">
+                  No sales data available for the selected filters.
+                </p>
+              )}
             </CardContent>
           </Card>
+
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Avg. Profit Margin
-              </CardTitle>
-              <Percent className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle>Recent Sales Transactions</CardTitle>
+              <CardDescription>
+                Showing transactions for the selected filters.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {averageProfitMargin.toFixed(2)}%
-              </div>
+              {isLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <svg
+                    className="animate-spin h-8 w-8 text-primary"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                </div>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Sale ID</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Items</TableHead>
+                        <TableHead className="text-right">
+                          Total Amount
+                        </TableHead>
+                        <TableHead className="text-right">Profit</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredSalesData.slice(0, 10).map((sale) => (
+                        <TableRow key={sale.id}>
+                          <TableCell className="font-medium">
+                            {sale.id.substring(0, 8)}...
+                          </TableCell>
+                          <TableCell>
+                            {sale.timestamp.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {sale.customerName || "N/A"} <br />{" "}
+                            <span className="text-xs text-muted-foreground">
+                              {sale.contactNumber}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {sale.items
+                              .map((item) => `${item.name} (x${item.quantity})`)
+                              .join(", ")}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${sale.totalAmount.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right text-green-600 dark:text-green-400">
+                            ${sale.profit.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteSale(sale)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Delete Sale</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {filteredSalesData.length === 0 && (
+                    <p className="py-4 text-center text-muted-foreground">
+                      No sales transactions found for the selected filters.
+                    </p>
+                  )}
+                </>
+              )}
             </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalSalesCount}</div>
-            </CardContent>
+            {filteredSalesData.length > 10 && (
+              <CardFooter>
+                <p className="text-xs text-muted-foreground">
+                  Showing first 10 of {filteredSalesData.length} sales.
+                </p>
+              </CardFooter>
+            )}
           </Card>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Daily Sales Performance</CardTitle>
-            <CardDescription>
-              Revenue and Profit for the selected period and customer.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {salesByDay.length > 0 ? (
-              <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={salesByDay}
-                    margin={{ top: 5, right: 20, left: -20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={(value) =>
-                        new Date(value + "T00:00:00").toLocaleDateString(
-                          "en-US",
-                          { month: "short", day: "numeric" }
-                        )
-                      }
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tickFormatter={(value) => `$${value}`}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <ChartTooltip
-                      cursor={false}
-                      content={
-                        <ChartTooltipContent
-                          indicator="dot"
-                          labelFormatter={(label, payload) => {
-                            if (
-                              payload &&
-                              payload.length > 0 &&
-                              payload[0].payload.date
-                            ) {
-                              return new Date(
-                                payload[0].payload.date + "T00:00:00"
-                              ).toLocaleDateString("en-US", {
-                                weekday: "short",
-                                month: "short",
-                                day: "numeric",
-                              });
-                            }
-                            return label;
-                          }}
-                        />
-                      }
-                    />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Bar
-                      dataKey="revenue"
-                      fill="var(--color-revenue)"
-                      radius={4}
-                    />
-                    <Bar
-                      dataKey="profit"
-                      fill="var(--color-profit)"
-                      radius={4}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-            ) : (
-              <p className="py-4 text-center text-muted-foreground">
-                No sales data available for the selected filters.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Sales Transactions</CardTitle>
-            <CardDescription>
-              Showing transactions for the selected filters.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sale ID</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead className="text-right">Total Amount</TableHead>
-                  <TableHead className="text-right">Profit</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSalesData.slice(0, 10).map((sale) => (
-                  <TableRow key={sale.id}>
-                    <TableCell className="font-medium">
-                      {sale.id.substring(0, 8)}...
-                    </TableCell>
-                    <TableCell>{sale.timestamp.toLocaleString()}</TableCell>
-                    <TableCell>
-                      {sale.customerName || "N/A"} <br />{" "}
-                      <span className="text-xs text-muted-foreground">
-                        {sale.contactNumber}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {sale.items
-                        .map((item) => `${item.name} (x${item.quantity})`)
-                        .join(", ")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      ${sale.totalAmount.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right text-green-600 dark:text-green-400">
-                      ${sale.profit.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteSale(sale.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Delete Sale</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {filteredSalesData.length === 0 && (
-              <p className="py-4 text-center text-muted-foreground">
-                No sales transactions found for the selected filters.
-              </p>
-            )}
-          </CardContent>
-          {filteredSalesData.length > 10 && (
-            <CardFooter>
-              <p className="text-xs text-muted-foreground">
-                Showing first 10 of {filteredSalesData.length} sales.
-              </p>
-            </CardFooter>
-          )}
-        </Card>
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+      {isConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 !mt-0">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md mx-auto">
+            <h2 className="text-lg font-bold">Confirm Deletion</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Are you sure you want to delete{" "}
+              <span className="font-bold">{saleToDelete?.id}</span>? This action
+              cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsConfirmModalOpen(false);
+                  setSaleToDelete(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDeleteSale}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
