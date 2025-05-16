@@ -1,0 +1,730 @@
+"use client";
+
+import type { ChangeEvent } from "react";
+import { useState, useEffect, useMemo } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DollarSign,
+  TrendingUp,
+  ShoppingCart,
+  CalendarIcon,
+  FilterX,
+  UserSearch,
+  ChevronsUpDown,
+  Check,
+  Trash2,
+} from "lucide-react";
+import type { SaleTransaction } from "@/types";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+} from "@/components/ui/chart";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+} from "recharts";
+import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { format, startOfMonth, startOfDay, endOfDay } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+// Mock sales data for demonstration
+const mockSales: SaleTransaction[] = [
+  {
+    id: "sale001",
+    timestamp: new Date("2024-05-01T10:30:00Z"),
+    items: [
+      {
+        id: "si001",
+        inventoryItemId: "tire001",
+        name: "Performance Radial 205/55R16",
+        quantity: 2,
+        unitPrice: 120,
+        costPrice: 75,
+      },
+      {
+        id: "si002",
+        inventoryItemId: "service001",
+        name: "Oil Change Service",
+        quantity: 1,
+        unitPrice: 45,
+        costPrice: 15,
+      },
+    ],
+    subtotal: 2 * 120 + 45,
+    taxAmount: (2 * 120 + 45) * 0.1,
+    totalAmount: (2 * 120 + 45) * 1.1,
+    profit: 2 * (120 - 75) + (45 - 15),
+    customerName: "Alice Smith",
+    contactNumber: "555-1234",
+    customerEmail: "alice@example.com",
+    carModel: "Honda Civic 2020",
+    paymentMethod: "card",
+    hstRate: 0.13,
+  },
+  {
+    id: "sale002",
+    timestamp: new Date("2024-05-01T14:15:00Z"),
+    items: [
+      {
+        id: "si003",
+        inventoryItemId: "oil001",
+        name: "Synthetic Oil 5W-30 (1 Qt)",
+        quantity: 5,
+        unitPrice: 9,
+        costPrice: 5,
+      },
+      {
+        id: "si004",
+        inventoryItemId: "filter001",
+        name: "Oil Filter XYZ",
+        quantity: 1,
+        unitPrice: 7,
+        costPrice: 3,
+      },
+    ],
+    subtotal: 5 * 9 + 7,
+    taxAmount: (5 * 9 + 7) * 0.1,
+    totalAmount: (5 * 9 + 7) * 1.1,
+    profit: 5 * (9 - 5) + (7 - 3),
+    customerName: "Bob Johnson",
+    contactNumber: "555-5678",
+    customerEmail: "bob@example.com",
+    carModel: "Toyota Corolla 2019",
+    paymentMethod: "cash",
+    hstRate: 0.13,
+  },
+  {
+    id: "sale003",
+    timestamp: new Date("2024-05-02T09:00:00Z"),
+    items: [
+      {
+        id: "si005",
+        inventoryItemId: "tire002",
+        name: "All-Season Touring 195/65R15",
+        quantity: 4,
+        unitPrice: 100,
+        costPrice: 60,
+      },
+    ],
+    subtotal: 4 * 100,
+    taxAmount: 4 * 100 * 0.1,
+    totalAmount: 4 * 100 * 1.1,
+    profit: 4 * (100 - 60),
+    customerName: "Alice Smith", // Another sale for Alice
+    contactNumber: "555-1234",
+    customerEmail: "alice@example.com",
+    carModel: "Honda Civic 2020",
+    paymentMethod: "card",
+    hstRate: 0.13,
+  },
+  {
+    id: "sale004",
+    timestamp: new Date("2024-04-15T11:00:00Z"),
+    items: [
+      {
+        id: "si006",
+        inventoryItemId: "service002",
+        name: "Tire Rotation",
+        quantity: 1,
+        unitPrice: 25,
+        costPrice: 5,
+      },
+    ],
+    subtotal: 25,
+    taxAmount: 2.5,
+    totalAmount: 27.5,
+    profit: 20,
+    customerName: "Carol Williams",
+    contactNumber: "555-8765",
+    customerEmail: "carol@example.com",
+    carModel: "Ford F-150 2022",
+    paymentMethod: "cash",
+    hstRate: 0, // No HST for this sale
+  },
+];
+
+interface ReportCustomer {
+  contactNumber: string;
+  customerName: string;
+}
+
+const chartConfig = {
+  profit: { label: "Profit", color: "hsl(var(--chart-1))" },
+  revenue: { label: "Revenue", color: "hsl(var(--chart-2))" },
+};
+
+export default function ReportsPage() {
+  const { toast } = useToast();
+  const [salesData, setSalesData] = useState<SaleTransaction[]>([]);
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({
+    from: startOfMonth(new Date()),
+    to: endOfDay(new Date()),
+  });
+  const [customerSearchTerm, setCustomerSearchTerm] = useState(""); // Will store selected customer's contactNumber
+  const [selectedCustomerDisplayName, setSelectedCustomerDisplayName] =
+    useState("");
+  const [customerSearchPopoverOpen, setCustomerSearchPopoverOpen] =
+    useState(false);
+  const [
+    currentCustomerCommandInputValue,
+    setCurrentCustomerCommandInputValue,
+  ] = useState("");
+
+  useEffect(() => {
+    setSalesData(mockSales);
+  }, []);
+
+  const uniqueCustomers = useMemo(() => {
+    const customersMap = new Map<string, ReportCustomer>();
+    salesData.forEach((sale) => {
+      if (sale.contactNumber && sale.customerName) {
+        if (!customersMap.has(sale.contactNumber)) {
+          customersMap.set(sale.contactNumber, {
+            contactNumber: sale.contactNumber,
+            customerName: sale.customerName,
+          });
+        }
+      }
+    });
+    return Array.from(customersMap.values());
+  }, [salesData]);
+
+  const filteredSalesData = useMemo(() => {
+    let intermediateFilteredSales = salesData;
+
+    if (customerSearchTerm) {
+      intermediateFilteredSales = intermediateFilteredSales.filter(
+        (sale) => sale.contactNumber === customerSearchTerm
+      );
+    }
+
+    const { from, to } = dateRange;
+    if (from || to) {
+      const startDate = from ? startOfDay(from) : null;
+      const endDate = to ? endOfDay(to) : null;
+
+      return intermediateFilteredSales.filter((sale) => {
+        const saleTimestamp = sale.timestamp;
+        if (startDate && saleTimestamp < startDate) return false;
+        if (endDate && saleTimestamp > endDate) return false;
+        return true;
+      });
+    }
+
+    return intermediateFilteredSales;
+  }, [salesData, dateRange, customerSearchTerm]);
+
+  const totalRevenue = useMemo(
+    () => filteredSalesData.reduce((acc, sale) => acc + sale.totalAmount, 0),
+    [filteredSalesData]
+  );
+  const totalProfit = useMemo(
+    () => filteredSalesData.reduce((acc, sale) => acc + sale.profit, 0),
+    [filteredSalesData]
+  );
+  const averageProfitMargin = useMemo(() => {
+    if (totalRevenue === 0) return 0;
+    return (totalProfit / totalRevenue) * 100;
+  }, [totalProfit, totalRevenue]);
+  const totalSalesCount = filteredSalesData.length;
+
+  const salesByDay = useMemo(() => {
+    const dailyData: {
+      [key: string]: { date: string; revenue: number; profit: number };
+    } = {};
+    filteredSalesData.forEach((sale) => {
+      const dateStr = sale.timestamp.toLocaleDateString("en-CA");
+      if (!dailyData[dateStr]) {
+        dailyData[dateStr] = { date: dateStr, revenue: 0, profit: 0 };
+      }
+      dailyData[dateStr].revenue += sale.totalAmount;
+      dailyData[dateStr].profit += sale.profit;
+    });
+    return Object.values(dailyData).sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+  }, [filteredSalesData]);
+
+  const handleClearFilters = () => {
+    setDateRange({ from: undefined, to: undefined });
+    setCustomerSearchTerm("");
+    setSelectedCustomerDisplayName("");
+    setCurrentCustomerCommandInputValue("");
+  };
+
+  const handleSelectCustomer = (customer: ReportCustomer) => {
+    setCustomerSearchTerm(customer.contactNumber);
+    setSelectedCustomerDisplayName(customer.customerName);
+    setCurrentCustomerCommandInputValue(
+      `${customer.customerName} (${customer.contactNumber})`
+    );
+    setCustomerSearchPopoverOpen(false);
+  };
+
+  const handleDeleteSale = (saleId: string) => {
+    const saleToDelete = salesData.find((s) => s.id === saleId);
+    setSalesData((prev) => prev.filter((s) => s.id !== saleId));
+    toast({
+      title: "Sale Deleted",
+      description: `Sale transaction ${saleId.substring(
+        0,
+        8
+      )}... has been deleted.`,
+      variant: "destructive",
+    });
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-6">
+        <CardHeader className="px-0">
+          <CardTitle>Profit & Sales Reports</CardTitle>
+          <CardDescription>
+            Analyze your business performance. Select a date range or search by
+            customer to filter results.
+          </CardDescription>
+        </CardHeader>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Filter Reports</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full sm:w-[240px] justify-start text-left font-normal",
+                      !dateRange.from && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange.from ? (
+                      format(dateRange.from, "PPP")
+                    ) : (
+                      <span>Pick a start date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={dateRange.from}
+                    onSelect={(date) =>
+                      setDateRange((prev) => ({
+                        ...prev,
+                        from: date || undefined,
+                      }))
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <span className="text-muted-foreground hidden sm:inline">-</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full sm:w-[240px] justify-start text-left font-normal",
+                      !dateRange.to && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange.to ? (
+                      format(dateRange.to, "PPP")
+                    ) : (
+                      <span>Pick an end date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={dateRange.to}
+                    onSelect={(date) =>
+                      setDateRange((prev) => ({
+                        ...prev,
+                        to: date || undefined,
+                      }))
+                    }
+                    disabled={(date) =>
+                      dateRange.from ? date < dateRange.from : false
+                    }
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex-grow">
+              <Label
+                htmlFor="customerSearchCombobox"
+                className="block mb-1 text-sm font-medium"
+              >
+                Search by Customer
+              </Label>
+              <Popover
+                open={customerSearchPopoverOpen}
+                onOpenChange={setCustomerSearchPopoverOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={customerSearchPopoverOpen}
+                    id="customerSearchCombobox"
+                    className="w-full justify-between mt-1"
+                  >
+                    <div className="flex items-center">
+                      <UserSearch className="mr-2 h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      {selectedCustomerDisplayName || "Select a customer..."}
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                  <Command>
+                    <CommandInput
+                      placeholder="Search by name or phone..."
+                      value={currentCustomerCommandInputValue}
+                      onValueChange={(value) => {
+                        setCurrentCustomerCommandInputValue(value);
+                        // If user clears input, deselect customer
+                        if (!value.trim()) {
+                          setCustomerSearchTerm("");
+                          setSelectedCustomerDisplayName("");
+                        }
+                      }}
+                    />
+                    <CommandEmpty>No customer found.</CommandEmpty>
+                    <CommandList>
+                      <CommandGroup>
+                        {uniqueCustomers
+                          .filter(
+                            (customer) =>
+                              customer.contactNumber.includes(
+                                currentCustomerCommandInputValue
+                              ) ||
+                              customer.customerName
+                                .toLowerCase()
+                                .includes(
+                                  currentCustomerCommandInputValue.toLowerCase()
+                                )
+                          )
+                          .map((customer) => (
+                            <CommandItem
+                              key={customer.contactNumber}
+                              value={`${customer.customerName} ${customer.contactNumber}`}
+                              onSelect={() => handleSelectCustomer(customer)}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  customerSearchTerm === customer.contactNumber
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              <div>
+                                <div>{customer.customerName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {customer.contactNumber}
+                                </div>
+                              </div>
+                            </CommandItem>
+                          ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button
+              variant="ghost"
+              onClick={handleClearFilters}
+              className="w-full lg:w-auto"
+            >
+              <FilterX className="mr-2 h-4 w-4" />
+              Clear All Filters
+            </Button>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Total Revenue
+              </CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ${totalRevenue.toFixed(2)}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Total Profit
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ${totalProfit.toFixed(2)}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Avg. Profit Margin
+              </CardTitle>
+              <Percent className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {averageProfitMargin.toFixed(2)}%
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalSalesCount}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily Sales Performance</CardTitle>
+            <CardDescription>
+              Revenue and Profit for the selected period and customer.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {salesByDay.length > 0 ? (
+              <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={salesByDay}
+                    margin={{ top: 5, right: 20, left: -20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(value) =>
+                        new Date(value + "T00:00:00").toLocaleDateString(
+                          "en-US",
+                          { month: "short", day: "numeric" }
+                        )
+                      }
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      tickFormatter={(value) => `$${value}`}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <ChartTooltip
+                      cursor={false}
+                      content={
+                        <ChartTooltipContent
+                          indicator="dot"
+                          labelFormatter={(label, payload) => {
+                            if (
+                              payload &&
+                              payload.length > 0 &&
+                              payload[0].payload.date
+                            ) {
+                              return new Date(
+                                payload[0].payload.date + "T00:00:00"
+                              ).toLocaleDateString("en-US", {
+                                weekday: "short",
+                                month: "short",
+                                day: "numeric",
+                              });
+                            }
+                            return label;
+                          }}
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar
+                      dataKey="revenue"
+                      fill="var(--color-revenue)"
+                      radius={4}
+                    />
+                    <Bar
+                      dataKey="profit"
+                      fill="var(--color-profit)"
+                      radius={4}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            ) : (
+              <p className="py-4 text-center text-muted-foreground">
+                No sales data available for the selected filters.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Sales Transactions</CardTitle>
+            <CardDescription>
+              Showing transactions for the selected filters.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sale ID</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Items</TableHead>
+                  <TableHead className="text-right">Total Amount</TableHead>
+                  <TableHead className="text-right">Profit</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSalesData.slice(0, 10).map((sale) => (
+                  <TableRow key={sale.id}>
+                    <TableCell className="font-medium">
+                      {sale.id.substring(0, 8)}...
+                    </TableCell>
+                    <TableCell>{sale.timestamp.toLocaleString()}</TableCell>
+                    <TableCell>
+                      {sale.customerName || "N/A"} <br />{" "}
+                      <span className="text-xs text-muted-foreground">
+                        {sale.contactNumber}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {sale.items
+                        .map((item) => `${item.name} (x${item.quantity})`)
+                        .join(", ")}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      ${sale.totalAmount.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right text-green-600 dark:text-green-400">
+                      ${sale.profit.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteSale(sale.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Delete Sale</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {filteredSalesData.length === 0 && (
+              <p className="py-4 text-center text-muted-foreground">
+                No sales transactions found for the selected filters.
+              </p>
+            )}
+          </CardContent>
+          {filteredSalesData.length > 10 && (
+            <CardFooter>
+              <p className="text-xs text-muted-foreground">
+                Showing first 10 of {filteredSalesData.length} sales.
+              </p>
+            </CardFooter>
+          )}
+        </Card>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+// Custom Percent Icon
+const Percent = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={cn("lucide lucide-percent", className)}
+    {...props}
+  >
+    <line x1="19" x2="5" y1="5" y2="19" />
+    <circle cx="6.5" cy="6.5" r="2.5" />
+    <circle cx="17.5" cy="17.5" r="2.5" />
+  </svg>
+);
