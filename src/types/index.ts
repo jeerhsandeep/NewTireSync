@@ -43,6 +43,7 @@ export interface Appointment {
   id: string;
   customerName: string;
   contactNumber: string;
+  customerEmail?: string;
   appointmentDate: Date;
   appointmentTime: string; // e.g., "10:00 AM"
   serviceType: string;
