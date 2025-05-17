@@ -539,23 +539,28 @@ export default function SalesPage() {
     );
     const currentActualHstRate = applyHst ? HST_RATE_VALUE : 0;
 
-    const saleData: Omit<SaleTransaction, "id"> = {
+    const saleData: Partial<SaleTransaction> = {
       items: currentSaleItems,
       subtotal,
       taxAmount,
       totalAmount,
       profit: finalizedProfit,
       timestamp: selectedSaleDate || new Date(),
-      customerName: customerName.trim() || undefined,
-      contactNumber: contactNumber.trim() || undefined,
-      customerEmail: customerEmail.trim() || undefined,
-      carModel: carModel.trim() || undefined,
-      vin: vin.trim() || undefined,
-      odometer: odometer.trim() || undefined,
+      customerName: customerName.trim() || "N/A",
+      contactNumber: contactNumber.trim() || "N/A",
+      customerEmail: customerEmail.trim() || "N/A",
+      carModel: carModel.trim() || "N/A",
+      vin: vin.trim() || "N/A",
+      odometer: odometer.trim() || "N/A",
       paymentMethod,
       hstRate: currentActualHstRate,
-      notes: notes.trim() || undefined,
+      notes: notes.trim() || "N/A",
     };
+
+    // Remove fields with null values
+    const sanitizedSaleData = Object.fromEntries(
+      Object.entries(saleData).filter(([_, value]) => value !== null)
+    );
 
     setIsLoading(true); // Start loading
 
@@ -581,7 +586,7 @@ export default function SalesPage() {
       // Save sale data to Firestore
       const saleId = `sale-${Date.now()}`;
       const saleRef = doc(db, "sales", userEmail, "userSales", saleId);
-      await setDoc(saleRef, saleData);
+      await setDoc(saleRef, sanitizedSaleData);
 
       // Save or update customer details in Firestore
       if (contactNumber) {
