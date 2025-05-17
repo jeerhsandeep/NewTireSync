@@ -36,12 +36,14 @@ export interface SaleTransaction {
   paymentMethod: "card" | "cash" | ""; // Payment method
   hstRate: number; // HST rate applied (e.g., 0.13 for 13%, 0 for no tax)
   notes?: string;
+  invoiceNumber: number;
 }
 
 export interface Appointment {
   id: string;
   customerName: string;
   contactNumber: string;
+  customerEmail?: string;
   appointmentDate: Date;
   appointmentTime: string; // e.g., "10:00 AM"
   serviceType: string;
