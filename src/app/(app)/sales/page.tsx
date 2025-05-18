@@ -601,6 +601,24 @@ export default function SalesPage() {
       const saleRef = doc(db, "sales", userEmail, "userSales", saleId);
       await setDoc(saleRef, saleData);
 
+      // Update inventory stock for non-service items
+      for (const saleItem of currentSaleItems) {
+        const inventoryItem = inventory.find(
+          (inv) => inv.id === saleItem.inventoryItemId
+        );
+        if (inventoryItem && inventoryItem.category !== "Services") {
+          const newStock = (inventoryItem.stock || 0) - saleItem.quantity;
+          const inventoryRef = doc(
+            db,
+            "inventory",
+            userEmail,
+            "userInventory",
+            inventoryItem.id
+          );
+          await setDoc(inventoryRef, { stock: newStock }, { merge: true });
+        }
+      }
+
       // Save or update customer details in Firestore
       if (contactNumber) {
         const customerRef = doc(
@@ -686,141 +704,6 @@ export default function SalesPage() {
     } finally {
       setIsLoading(false); // Stop loading
     }
-
-    // const saleData: Partial<SaleTransaction> = {
-    //   items: currentSaleItems,
-    //   subtotal,
-    //   taxAmount,
-    //   totalAmount,
-    //   profit: finalizedProfit,
-    //   timestamp: selectedSaleDate || new Date(),
-    //   customerName: customerName.trim() || "N/A",
-    //   contactNumber: contactNumber.trim() || "N/A",
-    //   customerEmail: customerEmail.trim() || "N/A",
-    //   carModel: carModel.trim() || "N/A",
-    //   vin: vin.trim() || "N/A",
-    //   odometer: odometer.trim() || "N/A",
-    //   paymentMethod,
-    //   hstRate: currentActualHstRate,
-    //   notes: notes.trim() || "N/A",
-    // };
-
-    // // Remove fields with null values
-    // const sanitizedSaleData = Object.fromEntries(
-    //   Object.entries(saleData).filter(([_, value]) => value !== null)
-    // );
-
-    // setIsLoading(true); // Start loading
-
-    // console.log("Finalizing sale:", {
-    //   ...saleData,
-    //   id: `sale-${Date.now()}`,
-    // });
-
-    // try {
-    //   const user = auth.currentUser;
-    //   if (!user) {
-    //     toast({
-    //       title: "Error",
-    //       description: "User is not authenticated.",
-    //       variant: "destructive",
-    //     });
-    //     setIsLoading(false);
-    //     return;
-    //   }
-
-    //   const userEmail = user.email || "unknown_user";
-
-    //   // Save sale data to Firestore
-    //   const saleId = `sale-${Date.now()}`;
-    //   const saleRef = doc(db, "sales", userEmail, "userSales", saleId);
-    //   await setDoc(saleRef, sanitizedSaleData);
-
-    //   // Save or update customer details in Firestore
-    //   if (contactNumber) {
-    //     const customerRef = doc(
-    //       db,
-    //       "customers",
-    //       userEmail, // User's email
-    //       "contactNumbers", // Subcollection for contact numbers
-    //       contactNumber // Document ID
-    //     );
-
-    //     const existingCustomer = customers.find(
-    //       (customer) => customer.contactNumber === contactNumber
-    //     );
-
-    //     const updatedCustomer = {
-    //       customerName: customerName.trim(),
-    //       customerEmail: customerEmail.trim(),
-    //       carModel: carModel.trim() || "",
-    //       vin: vin.trim() || "",
-    //       notes: notes.trim() || "",
-    //       odometer: odometer.trim() || "",
-    //     };
-
-    //     if (existingCustomer) {
-    //       // Update existing customer details
-    //       await setDoc(customerRef, {
-    //         ...existingCustomer,
-    //         ...updatedCustomer,
-    //       });
-
-    //       // Update customers state
-    //       setCustomers((prevCustomers) =>
-    //         prevCustomers.map((customer) =>
-    //           customer.contactNumber === contactNumber
-    //             ? { ...customer, ...updatedCustomer }
-    //             : customer
-    //         )
-    //       );
-    //     } else {
-    //       // Add new customer details
-    //       await setDoc(customerRef, updatedCustomer);
-
-    //       // Update customers state with the new customer
-    //       setCustomers((prevCustomers) => [
-    //         ...prevCustomers,
-    //         { contactNumber, ...updatedCustomer },
-    //       ]);
-    //     }
-    //   }
-
-    //   toast({
-    //     title: "Sale Finalized",
-    //     description: `Total: $${totalAmount.toFixed(2)} for ${
-    //       saleData.customerName || "N/A"
-    //     }`,
-    //   });
-
-    //   setCurrentSaleItems([]);
-    //   setCustomerName("");
-    //   setContactNumber("");
-    //   setCustomerEmail("");
-    //   setCurrentCommandInputValue("");
-    //   setCarModel("");
-    //   setVin("");
-    //   setOdometer("");
-    //   setPaymentMethod("");
-    //   setApplyHst(true);
-    //   setCurrentItem({ inventoryItemId: "", quantity: "1" });
-    //   setCustomItemName("");
-    //   setCustomItemQuantity("1");
-    //   setCustomItemUnitPrice("");
-    //   setCustomItemCostPrice("");
-    //   setShowCustomItemForm(false);
-    //   setSelectedSaleDate(new Date());
-    //   // notes state is intentionally not cleared
-    // } catch (error) {
-    //   console.error("Error finalizing sale:", error);
-    //   toast({
-    //     title: "Error",
-    //     description: "Failed to finalize sale.",
-    //     variant: "destructive",
-    //   });
-    // } finally {
-    //   setIsLoading(false); // Stop loading
-    // }
   };
 
   const fetchShopDetails = async (userEmail: string) => {
