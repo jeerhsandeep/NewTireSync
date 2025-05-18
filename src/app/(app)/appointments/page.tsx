@@ -468,6 +468,7 @@ export default function AppointmentsPage() {
         description: "Please fill all required fields.",
         variant: "destructive",
       });
+      setFormLoading(false);
       return;
     }
 
@@ -478,6 +479,7 @@ export default function AppointmentsPage() {
         description: "User is not authenticated.",
         variant: "destructive",
       });
+      setFormLoading(false);
       return;
     }
     const userEmail = user.email || "unknown_user";
@@ -560,6 +562,7 @@ export default function AppointmentsPage() {
         description: "Failed to add appointment.",
         variant: "destructive",
       });
+      setFormLoading(false);
     } finally {
       setFormLoading(false);
     }
@@ -595,6 +598,7 @@ export default function AppointmentsPage() {
         description: "Please fill all required fields for editing.",
         variant: "destructive",
       });
+      setFormLoading(false);
       return;
     }
 
@@ -605,6 +609,7 @@ export default function AppointmentsPage() {
         description: "User is not authenticated.",
         variant: "destructive",
       });
+      setFormLoading(false);
       return;
     }
     const userEmail = user.email || "unknown_user";
@@ -667,6 +672,7 @@ export default function AppointmentsPage() {
         description: "Failed to update appointment.",
         variant: "destructive",
       });
+      setFormLoading(false);
     } finally {
       setFormLoading(false);
     }
