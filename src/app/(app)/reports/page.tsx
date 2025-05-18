@@ -786,7 +786,7 @@ export default function ReportsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Sale ID</TableHead>
+                        <TableHead>Car Model</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Items</TableHead>
@@ -801,7 +801,7 @@ export default function ReportsPage() {
                       {filteredSalesData.slice(0, 10).map((sale) => (
                         <TableRow key={sale.id}>
                           <TableCell className="font-medium">
-                            {sale.id.substring(0, 8)}...
+                            {sale.carModel}
                           </TableCell>
                           <TableCell>
                             {sale.timestamp.toLocaleString()}
