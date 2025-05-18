@@ -470,11 +470,20 @@ export default function AppointmentsPage() {
         "userAppointments",
         createdAppointment.id
       );
-      await setDoc(apptRef, {
-        ...createdAppointment,
-        // Firestore doesn't store JS Date, use Timestamp or ISO string
-        appointmentDate: createdAppointment.appointmentDate.toISOString(),
-      });
+      // await setDoc(apptRef, {
+      //   ...createdAppointment,
+      //   // Firestore doesn't store JS Date, use Timestamp or ISO string
+      //   appointmentDate: createdAppointment.appointmentDate.toISOString(),
+      // });
+      // Remove undefined fields before saving to Firestore
+      const appointmentToSave = Object.fromEntries(
+        Object.entries({
+          ...createdAppointment,
+          appointmentDate: createdAppointment.appointmentDate.toISOString(),
+        }).filter(([_, v]) => v !== undefined)
+      );
+
+      await setDoc(apptRef, appointmentToSave);
       setAppointments((prev) => [createdAppointment, ...prev]);
 
       // Optionally update customer contact info in Firestore
