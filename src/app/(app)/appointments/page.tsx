@@ -476,11 +476,6 @@ export default function AppointmentsPage() {
         "userAppointments",
         createdAppointment.id
       );
-      // await setDoc(apptRef, {
-      //   ...createdAppointment,
-      //   // Firestore doesn't store JS Date, use Timestamp or ISO string
-      //   appointmentDate: createdAppointment.appointmentDate.toISOString(),
-      // });
       // Remove undefined fields before saving to Firestore
       const appointmentToSave = Object.fromEntries(
         Object.entries({
@@ -829,9 +824,38 @@ export default function AppointmentsPage() {
   const currentButtonText = isEditing ? "Save Changes" : "Book Appointment";
 
   const filteredAppointments = useMemo(() => {
-    let apps = [...appointments].sort(
-      (a, b) => b.appointmentDate.getTime() - a.appointmentDate.getTime()
-    );
+    // Helper to convert "hh:mm AM/PM" to hours and minutes
+    const parseTime = (timeStr: string) => {
+      if (!timeStr) return { hour: 0, min: 0 };
+      const [time, meridian] = timeStr.split(" ");
+      const [hourStr, minStr] = time.split(":");
+      let hour = parseInt(hourStr, 10);
+      const min = parseInt(minStr, 10);
+      if (meridian === "PM" && hour !== 12) hour += 12;
+      if (meridian === "AM" && hour === 12) hour = 0;
+      return { hour, min };
+    };
+
+    let apps = [...appointments];
+
+    // Sort by combined date and time
+    apps.sort((a, b) => {
+      const dateA = a.appointmentDate
+        ? new Date(a.appointmentDate)
+        : new Date(0);
+      const dateB = b.appointmentDate
+        ? new Date(b.appointmentDate)
+        : new Date(0);
+
+      // Add time to date
+      const { hour: hourA, min: minA } = parseTime(a.appointmentTime);
+      const { hour: hourB, min: minB } = parseTime(b.appointmentTime);
+
+      dateA.setHours(hourA, minA, 0, 0);
+      dateB.setHours(hourB, minB, 0, 0);
+
+      return dateA.getTime() - dateB.getTime();
+    });
 
     if (searchTerm) {
       apps = apps.filter(
