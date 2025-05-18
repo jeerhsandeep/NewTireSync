@@ -394,7 +394,7 @@ export default function AppointmentsPage() {
     setTimePopoverOpen(false);
   };
 
-  const handleStatusChange = (
+  const handleStatusChange = async (
     appointmentId: string,
     newStatus: Appointment["status"]
   ) => {
@@ -403,10 +403,36 @@ export default function AppointmentsPage() {
         app.id === appointmentId ? { ...app, status: newStatus } : app
       )
     );
-    toast({
-      title: "Status Updated",
-      description: `Appointment status changed to ${newStatus}.`,
-    });
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "User is not authenticated.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const userEmail = user.email || "unknown_user";
+      const apptRef = doc(
+        db,
+        "appointments",
+        userEmail,
+        "userAppointments",
+        appointmentId
+      );
+      await updateDoc(apptRef, { status: newStatus });
+      toast({
+        title: "Status Updated",
+        description: `Appointment status changed to ${newStatus}.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update status in database.",
+        variant: "destructive",
+      });
+    }
   };
 
   const fetchCustomers = async (userEmail: string) => {
