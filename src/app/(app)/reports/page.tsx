@@ -1,6 +1,5 @@
 "use client";
 
-import type { ChangeEvent } from "react";
 import { useState, useEffect, useMemo } from "react";
 import {
   Card,
@@ -28,6 +27,7 @@ import {
   ChevronsUpDown,
   Check,
   Trash2,
+  Printer,
 } from "lucide-react";
 import type { SaleTransaction } from "@/types";
 import {
@@ -70,7 +70,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+} from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -408,6 +414,191 @@ export default function ReportsPage() {
       setIsDeleting(false);
       setIsConfirmModalOpen(false);
       setSaleToDelete(null);
+    }
+  };
+
+  const fetchShopDetails = async (userEmail: string) => {
+    try {
+      const userDocRef = doc(db, "users", userEmail);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        return userDoc.data();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handlePrintInvoice = async (sale: SaleTransaction) => {
+    const user = auth.currentUser;
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "User is not authenticated.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const userEmail = user.email || "unknown_user";
+    const shopDetails = await fetchShopDetails(userEmail);
+
+    if (!shopDetails) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch shop details.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "height=600,width=800");
+    if (printWindow) {
+      printWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice ${sale.id}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+            .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); font-size: 16px; line-height: 24px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .header h1 { margin: 0 0 10px 0; font-size: 28px; color: #333; }
+            .header p { margin: 2px 0; font-size: 14px; color: #555; }
+            .details-section { display: flex; justify-content: space-between; margin-bottom: 30px; flex-wrap: wrap; }
+            .details-section div { width: 48%; margin-bottom: 15px; }
+            .details-section .full-width { width: 100%; }
+            .details-section h2 { font-size: 18px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+            .details-section p { margin: 0 0 5px 0; font-size: 14px; white-space: pre-wrap; }
+            .items-table { width: 100%; line-height: inherit; text-align: left; border-collapse: collapse; }
+            .items-table th, .items-table td { padding: 8px; border-bottom: 1px solid #ddd; }
+            .items-table th { background-color: #f9f9f9; font-weight: bold; }
+            .items-table .text-right { text-align: right; }
+            .totals-table { width: 100%; margin-top: 20px; }
+            .totals-table td { padding: 5px 0; }
+            .totals-table .label { font-weight: bold; }
+            .totals-table .text-right { text-align: right; }
+            .grand-total { font-size: 1.2em; font-weight: bold; }
+            .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #777; }
+            @media print {
+              body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .invoice-box { box-shadow: none; border: none; margin: 0; padding: 0; }
+              .no-print { display: none !important; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-box">
+            <div class="header">
+              <h1>${shopDetails.shopName}</h1>
+              <p>${shopDetails.address}</p>
+              <p>Phone: ${shopDetails.phoneNumber} | Email: ${
+        shopDetails.email
+      }</p>
+              <p>Invoice #: ${sale.id}</p>
+              <p>Date: ${
+                sale.timestamp
+                  ? new Date(sale.timestamp).toLocaleDateString()
+                  : ""
+              }</p>
+            </div>
+            <div class="details-section">
+              <div>
+                <h2>Bill To:</h2>
+                <p><strong>Name:</strong> ${sale.customerName || "N/A"}</p>
+                <p><strong>Contact:</strong> ${sale.contactNumber || "N/A"}</p>
+                ${
+                  sale.customerEmail
+                    ? `<p><strong>Email:</strong> ${sale.customerEmail}</p>`
+                    : ""
+                }
+                ${
+                  sale.carModel
+                    ? `<p><strong>Vehicle:</strong> ${sale.carModel}</p>`
+                    : ""
+                }
+              </div>
+              <div>
+                <h2>Payment Details:</h2>
+                <p><strong>Payment Method:</strong> ${
+                  sale.paymentMethod
+                    ? sale.paymentMethod.charAt(0).toUpperCase() +
+                      sale.paymentMethod.slice(1)
+                    : "N/A"
+                }</p>
+              </div>
+            </div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Item/Service</th>
+                  <th class="text-right">Quantity</th>
+                  <th class="text-right">Unit Price</th>
+                  <th class="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sale.items
+                  .map(
+                    (item) => `
+                  <tr>
+                    <td>${item.name}</td>
+                    <td class="text-right">${item.quantity}</td>
+                    <td class="text-right">$${item.unitPrice.toFixed(2)}</td>
+                    <td class="text-right">$${(
+                      item.unitPrice * item.quantity
+                    ).toFixed(2)}</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+            <table class="totals-table">
+              <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+              <tr>
+                <td class="label">Subtotal:</td>
+                <td class="text-right">$${sale.subtotal.toFixed(2)}</td>
+              </tr>
+              ${
+                sale.hstRate && sale.hstRate > 0
+                  ? `
+              <tr>
+                <td class="label">Tax (${(sale.hstRate * 100).toFixed(
+                  0
+                )}%):</td>
+                <td class="text-right">$${sale.taxAmount.toFixed(2)}</td>
+              </tr>
+              `
+                  : ""
+              }
+              <tr>
+                <td class="label grand-total">Grand Total:</td>
+                <td class="text-right grand-total">$${sale.totalAmount.toFixed(
+                  2
+                )}</td>
+              </tr>
+            </table>
+            <div class="footer">
+              <p>Thank you for your business!</p>
+              <p class="no-print" style="margin-top: 20px;"><button onclick="window.print();">Print this invoice</button> or close this window.</p>
+            </div>
+          </div>
+          <script>
+            setTimeout(() => {
+              window.print();
+            }, 250);
+          </script>
+        </body>
+      </html>
+    `);
+      printWindow.document.close();
+    } else {
+      toast({
+        title: "Print Error",
+        description:
+          "Could not open print window. Please check your browser's pop-up settings.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -786,7 +977,7 @@ export default function ReportsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Sale ID</TableHead>
+                        <TableHead>Car Model</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Items</TableHead>
@@ -801,7 +992,7 @@ export default function ReportsPage() {
                       {filteredSalesData.slice(0, 10).map((sale) => (
                         <TableRow key={sale.id}>
                           <TableCell className="font-medium">
-                            {sale.id.substring(0, 8)}...
+                            {sale.carModel}
                           </TableCell>
                           <TableCell>
                             {sale.timestamp.toLocaleString()}
@@ -823,7 +1014,21 @@ export default function ReportsPage() {
                           <TableCell className="text-right text-green-600 dark:text-green-400">
                             ${sale.profit.toFixed(2)}
                           </TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="text-center space-x-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handlePrintInvoice(sale)}
+                                >
+                                  <Printer className="h-4 w-4 text-primary" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Print Invoice</p>
+                              </TooltipContent>
+                            </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
