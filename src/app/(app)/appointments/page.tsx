@@ -428,6 +428,7 @@ export default function AppointmentsPage() {
       appointmentDate,
       appointmentTime,
       serviceType,
+      depositPaid,
     } = newAppointment;
     if (
       !customerName ||
@@ -455,10 +456,15 @@ export default function AppointmentsPage() {
     }
     const userEmail = user.email || "unknown_user";
 
+    // Ensure depositPaid is always a number
+    const normalizedDepositPaid =
+      depositPaid === undefined || depositPaid === null ? 0 : depositPaid;
+
     const createdAppointment: Appointment = {
       ...(newAppointment as Omit<Appointment, "id" | "status"> & {
         appointmentDate: Date;
       }),
+      depositPaid: normalizedDepositPaid,
       id: `appt-${Date.now()}`,
       status: "Scheduled",
     };
