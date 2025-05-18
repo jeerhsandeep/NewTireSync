@@ -442,6 +442,7 @@ export default function ReportsPage() {
     }
     const userEmail = user.email || "unknown_user";
     const shopDetails = await fetchShopDetails(userEmail);
+
     if (!shopDetails) {
       toast({
         title: "Error",
@@ -451,14 +452,12 @@ export default function ReportsPage() {
       return;
     }
 
-    const invoiceNumber = sale.invoiceNumber;
-
     const printWindow = window.open("", "_blank", "height=600,width=800");
     if (printWindow) {
       printWindow.document.write(`
       <html>
         <head>
-          <title>Invoice ${invoiceNumber}</title>
+          <title>Invoice ${sale.id}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
             .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); font-size: 16px; line-height: 24px; }
@@ -495,7 +494,7 @@ export default function ReportsPage() {
               <p>Phone: ${shopDetails.phoneNumber} | Email: ${
         shopDetails.email
       }</p>
-              <p>Invoice #: ${invoiceNumber}</p>
+              <p>Invoice #: ${sale.id}</p>
               <p>Date: ${
                 sale.timestamp
                   ? new Date(sale.timestamp).toLocaleDateString()

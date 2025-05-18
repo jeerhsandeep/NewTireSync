@@ -394,7 +394,7 @@ export default function AppointmentsPage() {
     setTimePopoverOpen(false);
   };
 
-  const handleStatusChange = async (
+  const handleStatusChange = (
     appointmentId: string,
     newStatus: Appointment["status"]
   ) => {
@@ -403,36 +403,10 @@ export default function AppointmentsPage() {
         app.id === appointmentId ? { ...app, status: newStatus } : app
       )
     );
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        toast({
-          title: "Error",
-          description: "User is not authenticated.",
-          variant: "destructive",
-        });
-        return;
-      }
-      const userEmail = user.email || "unknown_user";
-      const apptRef = doc(
-        db,
-        "appointments",
-        userEmail,
-        "userAppointments",
-        appointmentId
-      );
-      await updateDoc(apptRef, { status: newStatus });
-      toast({
-        title: "Status Updated",
-        description: `Appointment status changed to ${newStatus}.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update status in database.",
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "Status Updated",
+      description: `Appointment status changed to ${newStatus}.`,
+    });
   };
 
   const fetchCustomers = async (userEmail: string) => {
@@ -468,7 +442,6 @@ export default function AppointmentsPage() {
         description: "Please fill all required fields.",
         variant: "destructive",
       });
-      setFormLoading(false);
       return;
     }
 
@@ -479,7 +452,6 @@ export default function AppointmentsPage() {
         description: "User is not authenticated.",
         variant: "destructive",
       });
-      setFormLoading(false);
       return;
     }
     const userEmail = user.email || "unknown_user";
@@ -504,6 +476,11 @@ export default function AppointmentsPage() {
         "userAppointments",
         createdAppointment.id
       );
+      // await setDoc(apptRef, {
+      //   ...createdAppointment,
+      //   // Firestore doesn't store JS Date, use Timestamp or ISO string
+      //   appointmentDate: createdAppointment.appointmentDate.toISOString(),
+      // });
       // Remove undefined fields before saving to Firestore
       const appointmentToSave = Object.fromEntries(
         Object.entries({
@@ -562,7 +539,6 @@ export default function AppointmentsPage() {
         description: "Failed to add appointment.",
         variant: "destructive",
       });
-      setFormLoading(false);
     } finally {
       setFormLoading(false);
     }
@@ -598,7 +574,6 @@ export default function AppointmentsPage() {
         description: "Please fill all required fields for editing.",
         variant: "destructive",
       });
-      setFormLoading(false);
       return;
     }
 
@@ -609,7 +584,6 @@ export default function AppointmentsPage() {
         description: "User is not authenticated.",
         variant: "destructive",
       });
-      setFormLoading(false);
       return;
     }
     const userEmail = user.email || "unknown_user";
@@ -672,7 +646,6 @@ export default function AppointmentsPage() {
         description: "Failed to update appointment.",
         variant: "destructive",
       });
-      setFormLoading(false);
     } finally {
       setFormLoading(false);
     }
@@ -856,38 +829,9 @@ export default function AppointmentsPage() {
   const currentButtonText = isEditing ? "Save Changes" : "Book Appointment";
 
   const filteredAppointments = useMemo(() => {
-    // Helper to convert "hh:mm AM/PM" to hours and minutes
-    const parseTime = (timeStr: string) => {
-      if (!timeStr) return { hour: 0, min: 0 };
-      const [time, meridian] = timeStr.split(" ");
-      const [hourStr, minStr] = time.split(":");
-      let hour = parseInt(hourStr, 10);
-      const min = parseInt(minStr, 10);
-      if (meridian === "PM" && hour !== 12) hour += 12;
-      if (meridian === "AM" && hour === 12) hour = 0;
-      return { hour, min };
-    };
-
-    let apps = [...appointments];
-
-    // Sort by combined date and time
-    apps.sort((a, b) => {
-      const dateA = a.appointmentDate
-        ? new Date(a.appointmentDate)
-        : new Date(0);
-      const dateB = b.appointmentDate
-        ? new Date(b.appointmentDate)
-        : new Date(0);
-
-      // Add time to date
-      const { hour: hourA, min: minA } = parseTime(a.appointmentTime);
-      const { hour: hourB, min: minB } = parseTime(b.appointmentTime);
-
-      dateA.setHours(hourA, minA, 0, 0);
-      dateB.setHours(hourB, minB, 0, 0);
-
-      return dateA.getTime() - dateB.getTime();
-    });
+    let apps = [...appointments].sort(
+      (a, b) => b.appointmentDate.getTime() - a.appointmentDate.getTime()
+    );
 
     if (searchTerm) {
       apps = apps.filter(
