@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Package, LineChart, Wrench, CalendarDays } from "lucide-react";
+import { ShoppingCart, Package, LineChart, FileText, CalendarDays } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -14,6 +14,7 @@ import {
 
 const navItems = [
   { href: "/appointments", label: "Appointments", icon: CalendarDays },
+    { href: "/quotes", label: "Quotes", icon: FileText },
   { href: "/sales", label: "Sales", icon: ShoppingCart },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/reports", label: "Reports", icon: LineChart },
