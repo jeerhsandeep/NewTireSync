@@ -122,63 +122,6 @@ const mockAppointmentCustomers: MockAppointmentCustomer[] = [
   },
 ];
 
-const initialAppointmentsData: Appointment[] = [
-  {
-    id: "appt001",
-    customerName: "John Wick",
-    contactNumber: "555-0101",
-    customerEmail: "jw@continental.com",
-    appointmentDate: new Date(2024, 6, 15),
-    appointmentTime: "10:00 AM",
-    serviceType: "Tire Installation",
-    itemDetails: "Michelin Pilot Sport 4S, 245/35R19",
-    depositPaid: 50,
-    notes: "Needs alignment check too.",
-    status: "Scheduled",
-  },
-  {
-    id: "appt002",
-    customerName: "Sarah Connor",
-    contactNumber: "555-0202",
-    customerEmail: "sarah.c@cyberdyne.com",
-    appointmentDate: new Date(2024, 6, 16),
-    appointmentTime: "02:00 PM",
-    serviceType: "Oil Change",
-    itemDetails: "Synthetic 5W-30",
-    status: "Scheduled",
-  },
-  {
-    id: "appt003",
-    customerName: "Tony Stark",
-    contactNumber: "555-0303",
-    customerEmail: "tony@stark.com",
-    appointmentDate: new Date(2024, 6, 10),
-    appointmentTime: "11:00 AM",
-    serviceType: "Brake Service",
-    notes: "Check front rotors.",
-    status: "Completed",
-  },
-  {
-    id: "appt004",
-    customerName: "Ellen Ripley",
-    contactNumber: "555-0404",
-    customerEmail: "ripley@weyland-yutani.com",
-    appointmentDate: new Date(2024, 6, 15),
-    appointmentTime: "03:00 PM",
-    serviceType: "General Inspection",
-    status: "Scheduled",
-  },
-  {
-    id: "appt005",
-    customerName: "Bruce Wayne",
-    contactNumber: "555-0505",
-    customerEmail: "bruce@wayne.enterprises",
-    appointmentDate: new Date(2024, 6, 15),
-    appointmentTime: "09:00 AM",
-    serviceType: "Tire Rotation",
-    status: "Scheduled",
-  },
-];
 
 const serviceTypes = [
   "Tire Installation",
@@ -223,7 +166,6 @@ export default function AppointmentsPage() {
     serviceType: "",
     itemDetails: "",
     depositPaid: undefined,
-    notes: "",
   });
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Appointment | null>(null);
@@ -544,7 +486,6 @@ export default function AppointmentsPage() {
         serviceType: "",
         itemDetails: "",
         depositPaid: undefined,
-        notes: "",
       });
       setCurrentContactCommandInputValue("");
       setTimeSearchInput("");
@@ -662,7 +603,6 @@ export default function AppointmentsPage() {
         serviceType: "",
         itemDetails: "",
         depositPaid: undefined,
-        notes: "",
       });
       setCurrentContactCommandInputValue("");
       setTimeSearchInput("");
@@ -817,11 +757,6 @@ export default function AppointmentsPage() {
                     ? `<p><strong>Deposit Paid:</strong> $${appointment.depositPaid.toFixed(
                         2
                       )}</p>`
-                    : ""
-                }
-                ${
-                  appointment.notes
-                    ? `<p><strong>Notes:</strong> ${appointment.notes}</p>`
                     : ""
                 }
                 <p><strong>Status:</strong> ${appointment.status}</p>
@@ -1209,7 +1144,7 @@ export default function AppointmentsPage() {
                 </div>
                 <div>
                   <Label htmlFor="itemDetails">
-                    Item Details (e.g., Tire Size)
+                    Notes or Item Details (e.g., Tire Size)
                   </Label>
                   <div className="relative mt-1">
                     <Input
@@ -1237,20 +1172,6 @@ export default function AppointmentsPage() {
                     />
                   </div>
                 </div>
-                <div className="md:col-span-2 lg:col-span-1">
-                  <Label htmlFor="notes">Notes</Label>
-                  <div className="relative mt-1">
-                    <StickyNote className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Textarea
-                      id="notes"
-                      name="notes"
-                      value={currentForm.notes || ""}
-                      onChange={handleInputChange}
-                      className="pl-10"
-                      placeholder="Any additional notes..."
-                    />
-                  </div>
-                </div>
               </div>
             </CardContent>
             <CardFooter className="flex justify-end gap-2">
@@ -1270,7 +1191,6 @@ export default function AppointmentsPage() {
                       serviceType: "",
                       itemDetails: "",
                       depositPaid: undefined,
-                      notes: "",
                     });
                     setCurrentContactCommandInputValue("");
                     setTimeSearchInput("");
@@ -1391,7 +1311,7 @@ export default function AppointmentsPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Date & Time</TableHead>
                   <TableHead>Service</TableHead>
-                  <TableHead>Details</TableHead>
+                  <TableHead>Notes or Item Details </TableHead>
                   <TableHead className="text-right">Deposit</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-center">Actions</TableHead>

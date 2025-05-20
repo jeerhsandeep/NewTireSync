@@ -52,3 +52,42 @@ export interface Appointment {
   notes?: string;
   status: "Scheduled" | "Completed" | "Cancelled";
 }
+
+export interface QuoteItem {
+  id: string;
+  inventoryItemId?: string; // Link to inventory item
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  costPrice: number; // For internal reference if quote converts to sale
+}
+
+export interface Quote {
+  id: string;
+  items: QuoteItem[];
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  quoteDate: Date;
+  customerName?: string;
+  contactNumber?: string;
+  customerEmail?: string;
+  carModel?: string;
+  notes?: string;
+  taxRateApplied: number; // e.g. 0.13 or 0
+}
+
+export interface Quote {
+  id: string;
+  items: QuoteItem[];
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  quoteDate: Date;
+  customerName?: string;
+  contactNumber?: string;
+  customerEmail?: string;
+  carModel?: string;
+  notes?: string;
+  taxRateApplied: number; // e.g. 0.13 or 0
+}

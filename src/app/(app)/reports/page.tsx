@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from 'next/navigation';
+import type { ChangeEvent, FormEvent } from 'react';
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -70,6 +73,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 import {
   collection,
   deleteDoc,
@@ -79,122 +94,6 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
-
-// Mock sales data for demonstration
-const mockSales: SaleTransaction[] = [
-  {
-    id: "sale001",
-    timestamp: new Date("2024-05-01T10:30:00Z"),
-    items: [
-      {
-        id: "si001",
-        inventoryItemId: "tire001",
-        name: "Performance Radial 205/55R16",
-        quantity: 2,
-        unitPrice: 120,
-        costPrice: 75,
-      },
-      {
-        id: "si002",
-        inventoryItemId: "service001",
-        name: "Oil Change Service",
-        quantity: 1,
-        unitPrice: 45,
-        costPrice: 15,
-      },
-    ],
-    subtotal: 2 * 120 + 45,
-    taxAmount: (2 * 120 + 45) * 0.1,
-    totalAmount: (2 * 120 + 45) * 1.1,
-    profit: 2 * (120 - 75) + (45 - 15),
-    customerName: "Alice Smith",
-    contactNumber: "555-1234",
-    customerEmail: "alice@example.com",
-    carModel: "Honda Civic 2020",
-    paymentMethod: "card",
-    hstRate: 0.13,
-  },
-  {
-    id: "sale002",
-    timestamp: new Date("2024-05-01T14:15:00Z"),
-    items: [
-      {
-        id: "si003",
-        inventoryItemId: "oil001",
-        name: "Synthetic Oil 5W-30 (1 Qt)",
-        quantity: 5,
-        unitPrice: 9,
-        costPrice: 5,
-      },
-      {
-        id: "si004",
-        inventoryItemId: "filter001",
-        name: "Oil Filter XYZ",
-        quantity: 1,
-        unitPrice: 7,
-        costPrice: 3,
-      },
-    ],
-    subtotal: 5 * 9 + 7,
-    taxAmount: (5 * 9 + 7) * 0.1,
-    totalAmount: (5 * 9 + 7) * 1.1,
-    profit: 5 * (9 - 5) + (7 - 3),
-    customerName: "Bob Johnson",
-    contactNumber: "555-5678",
-    customerEmail: "bob@example.com",
-    carModel: "Toyota Corolla 2019",
-    paymentMethod: "cash",
-    hstRate: 0.13,
-  },
-  {
-    id: "sale003",
-    timestamp: new Date("2024-05-02T09:00:00Z"),
-    items: [
-      {
-        id: "si005",
-        inventoryItemId: "tire002",
-        name: "All-Season Touring 195/65R15",
-        quantity: 4,
-        unitPrice: 100,
-        costPrice: 60,
-      },
-    ],
-    subtotal: 4 * 100,
-    taxAmount: 4 * 100 * 0.1,
-    totalAmount: 4 * 100 * 1.1,
-    profit: 4 * (100 - 60),
-    customerName: "Alice Smith", // Another sale for Alice
-    contactNumber: "555-1234",
-    customerEmail: "alice@example.com",
-    carModel: "Honda Civic 2020",
-    paymentMethod: "card",
-    hstRate: 0.13,
-  },
-  {
-    id: "sale004",
-    timestamp: new Date("2024-04-15T11:00:00Z"),
-    items: [
-      {
-        id: "si006",
-        inventoryItemId: "service002",
-        name: "Tire Rotation",
-        quantity: 1,
-        unitPrice: 25,
-        costPrice: 5,
-      },
-    ],
-    subtotal: 25,
-    taxAmount: 2.5,
-    totalAmount: 27.5,
-    profit: 20,
-    customerName: "Carol Williams",
-    contactNumber: "555-8765",
-    customerEmail: "carol@example.com",
-    carModel: "Ford F-150 2022",
-    paymentMethod: "cash",
-    hstRate: 0, // No HST for this sale
-  },
-];
 
 interface ReportCustomer {
   contactNumber: string;
@@ -208,9 +107,10 @@ const chartConfig = {
 
 export default function ReportsPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const [salesData, setSalesData] = useState<SaleTransaction[]>([]);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({
-    from: startOfMonth(new Date()),
+    from: startOfDay(new Date()),
     to: endOfDay(new Date()),
   });
   const [customerSearchTerm, setCustomerSearchTerm] = useState(""); // Will store selected customer's contactNumber
@@ -218,6 +118,7 @@ export default function ReportsPage() {
     useState("");
   const [customerSearchPopoverOpen, setCustomerSearchPopoverOpen] =
     useState(false);
+    
   const [
     currentCustomerCommandInputValue,
     setCurrentCustomerCommandInputValue,
@@ -228,6 +129,11 @@ export default function ReportsPage() {
     null
   );
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const REPORTS_ACCESS_PASSWORD = "";
+  const [isReportsAuthenticated, setIsReportsAuthenticated] = useState(false);
+  const [enteredPassword, setEnteredPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
     const fetchSalesData = async (userEmail: string) => {
@@ -363,6 +269,59 @@ export default function ReportsPage() {
     setSaleToDelete(sale);
     setIsConfirmModalOpen(true); // Open the confirmation modal
   };
+
+ const handlePasswordSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (enteredPassword === REPORTS_ACCESS_PASSWORD) {
+      setIsReportsAuthenticated(true);
+      setPasswordError('');
+      setEnteredPassword(''); // Clear password for security
+      toast({ title: "Access Granted", description: "Loading reports..." });
+    } else {
+      setPasswordError("Incorrect password. Please try again.");
+      toast({ title: "Access Denied", description: "Incorrect password.", variant: "destructive" });
+    }
+  };
+
+  if (!isReportsAuthenticated) {
+    return (
+      <AlertDialog open={!isReportsAuthenticated} onOpenChange={(isOpen) => {
+        if (!isOpen && !isReportsAuthenticated) { // If dialog is closed by other means (e.g. Esc key) and not authenticated
+            router.push('/appointments');
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reports Section Locked</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please enter the password to access financial reports.
+              {passwordError && <p className="text-sm font-medium text-destructive mt-2">{passwordError}</p>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <form onSubmit={handlePasswordSubmit}>
+            <div className="space-y-2 py-4">
+              <Label htmlFor="reports-password">Password</Label>
+              <Input
+                id="reports-password"
+                type="password"
+                value={enteredPassword}
+                onChange={(e) => setEnteredPassword(e.target.value)}
+                required
+                placeholder="Enter password"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => router.push('/appointments')}>Cancel</AlertDialogCancel>
+              <AlertDialogAction type="submit"> {/* Changed Button to AlertDialogAction */}
+                Submit
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  }
+
 
   const confirmDeleteSale = async () => {
     if (!saleToDelete) return;
@@ -990,7 +949,7 @@ export default function ReportsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredSalesData.slice(0, 10).map((sale) => (
+                      {filteredSalesData.slice(0, 100).map((sale) => (
                         <TableRow key={sale.id}>
                           <TableCell className="font-medium">
                             {sale.carModel}
@@ -1057,10 +1016,10 @@ export default function ReportsPage() {
                 </>
               )}
             </CardContent>
-            {filteredSalesData.length > 10 && (
+            {filteredSalesData.length > 100 && (
               <CardFooter>
                 <p className="text-xs text-muted-foreground">
-                  Showing first 10 of {filteredSalesData.length} sales.
+                  Showing first 100 of {filteredSalesData.length} sales.
                 </p>
               </CardFooter>
             )}

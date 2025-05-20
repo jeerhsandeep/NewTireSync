@@ -1,10 +1,25 @@
 "use client";
 
 import type { ChangeEvent, FormEvent } from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+} from "@/components/ui/chart";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { startOfMonth, startOfDay, endOfDay } from "date-fns";
 import {
   Card,
   CardContent,
@@ -135,44 +150,6 @@ interface MockCustomer {
   notes?: string;
 }
 
-const mockCustomers: MockCustomer[] = [
-  {
-    contactNumber: "555-1234",
-    customerName: "Alice Smith",
-    customerEmail: "alice@example.com",
-    carModel: "Honda Civic 2020",
-    vin: "1HGCMABC123",
-    odometer: "120500km",
-    notes: "Regular oil change. Prefers synthetic.",
-  },
-  {
-    contactNumber: "555-5678",
-    customerName: "Bob Johnson",
-    customerEmail: "bob.j@work.com",
-    carModel: "Toyota Corolla 2019",
-    vin: "2T1BUDEF456",
-    odometer: "85300mi",
-    notes: "Check tire pressure before return.",
-  },
-  {
-    contactNumber: "555-8765",
-    customerName: "Carol Williams",
-    customerEmail: "carol.w@service.com",
-    carModel: "Ford F-150 2022",
-    vin: "JH4CU5HJ8KC000000",
-    odometer: "32000km",
-    notes: "New customer, referred by John Doe.",
-  },
-  {
-    contactNumber: "555-1111",
-    customerName: "David Brown",
-    customerEmail: "d.brown@email.org",
-    carModel: "Mazda 3 2021",
-    vin: "JM1BKGHJ789",
-    odometer: "45000km",
-    notes: "Wants a car wash if time permits.",
-  },
-];
 
 export default function SalesPage() {
   const { toast } = useToast();
@@ -202,6 +179,7 @@ export default function SalesPage() {
   const [currentCommandInputValue, setCurrentCommandInputValue] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"card" | "cash" | "">("");
   const [applyHst, setApplyHst] = useState(true);
+  const [salesData, setSalesData] = useState<SaleTransaction[]>([]);
 
   // State for custom item inputs
   const [customItemName, setCustomItemName] = useState("");
@@ -214,6 +192,35 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState(1000); // Default starting invoice number
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({
+      from: startOfDay(new Date()),
+      to: endOfDay(new Date()),
+    });
+const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+    const filteredSalesData = useMemo(() => {
+      let intermediateFilteredSales = salesData;
+  
+      if (customerSearchTerm) {
+        intermediateFilteredSales = intermediateFilteredSales.filter(
+          (sale) => sale.contactNumber === customerSearchTerm
+        );
+      }
+  
+      const { from, to } = dateRange;
+      if (from || to) {
+        const startDate = from ? startOfDay(from) : null;
+        const endDate = to ? endOfDay(to) : null;
+  
+        return intermediateFilteredSales.filter((sale) => {
+          const saleTimestamp = sale.timestamp;
+          if (startDate && saleTimestamp < startDate) return false;
+          if (endDate && saleTimestamp > endDate) return false;
+          return true;
+        });
+      }
+  
+      return intermediateFilteredSales;
+    }, [salesData, dateRange, customerSearchTerm]);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -686,6 +693,7 @@ export default function SalesPage() {
       setVin("");
       setOdometer("");
       setPaymentMethod("");
+      setNotes("");
       setApplyHst(true);
       setCurrentItem({ inventoryItemId: "", quantity: "1" });
       setCustomItemName("");
@@ -991,6 +999,37 @@ export default function SalesPage() {
       description: "Customer details have been pre-filled.",
     });
   };
+
+  interface ReportCustomer {
+  contactNumber: string;
+  customerName: string;
+}
+ const [customerSearchPopoverOpen, setCustomerSearchPopoverOpen] =
+    useState(false);
+  const [selectedCustomerDisplayName, setSelectedCustomerDisplayName] =
+    useState("");
+    const [saleToDelete, setSaleToDelete] = useState<SaleTransaction | null>(
+        null
+      );
+      const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+     const [
+        currentCustomerCommandInputValue,
+        setCurrentCustomerCommandInputValue,
+      ] = useState("");
+    const handleSelectCustomer = (customer: ReportCustomer) => {
+    setCustomerSearchTerm(customer.contactNumber);
+    setSelectedCustomerDisplayName(customer.customerName);
+    setCurrentCustomerCommandInputValue(
+      `${customer.customerName} (${customer.contactNumber})`
+    );
+    setCustomerSearchPopoverOpen(false);
+  };
+  const handleDeleteSale = (sale: SaleTransaction) => {
+      setSaleToDelete(sale);
+      setIsConfirmModalOpen(true); // Open the confirmation modal
+    };
+  
 
   return (
     <div className="space-y-6">
@@ -1632,16 +1671,7 @@ export default function SalesPage() {
                 Grand Total: ${totalAmount.toFixed(2)}
               </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePrintInvoice}
-              disabled={currentSaleItems.length === 0 || !paymentMethod}
-              className="w-full sm:w-auto"
-              size="lg"
-            >
-              <Printer className="mr-2 h-5 w-5" /> Print Invoice
-            </Button>
+           
             <Button
               size="lg"
               onClick={handleFinalizeSale}
@@ -1681,6 +1711,131 @@ export default function SalesPage() {
           </CardFooter>
         )}
       </Card>
+
+      <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Sales Transactions</CardTitle>
+                    <CardDescription>
+                      Showing transactions for the selected filters.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoading ? (
+                      <div className="flex justify-center items-center h-64">
+                        <svg
+                          className="animate-spin h-8 w-8 text-primary"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                      </div>
+                    ) : (
+                      <>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Car Model</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Customer</TableHead>
+                              <TableHead>Items</TableHead>
+                              <TableHead className="text-right">
+                                Total Amount
+                              </TableHead>
+                              <TableHead className="text-right">Profit</TableHead>
+                              <TableHead className="text-center">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredSalesData.slice(0, 100).map((sale) => (
+                              <TableRow key={sale.id}>
+                                <TableCell className="font-medium">
+                                  {sale.carModel+"a"}
+                                </TableCell>
+                                <TableCell>
+                                  {sale.timestamp.toLocaleString()}
+                                </TableCell>
+                                <TableCell>
+                                  {sale.customerName || "N/A"} <br />{" "}
+                                  <span className="text-xs text-muted-foreground">
+                                    {sale.contactNumber}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  {sale.items
+                                    .map((item) => `${item.name} (x${item.quantity})`)
+                                    .join(", ")}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  ${sale.totalAmount.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-right text-green-600 dark:text-green-400">
+                                  ${sale.profit.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-center space-x-1">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handlePrintInvoice(sale)}
+                                      >
+                                        <Printer className="h-4 w-4 text-primary" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Print Invoice</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteSale(sale)}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Delete Sale</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {filteredSalesData.length === 0 && (
+                          <p className="py-4 text-center text-muted-foreground">
+                            No sales transactions found for the selected filters.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </CardContent>
+                  {filteredSalesData.length > 100 && (
+                    <CardFooter>
+                      <p className="text-xs text-muted-foreground">
+                        Showing first 100 of {filteredSalesData.length} sales.
+                      </p>
+                    </CardFooter>
+                  )}
+                </Card>
+
     </div>
   );
 }

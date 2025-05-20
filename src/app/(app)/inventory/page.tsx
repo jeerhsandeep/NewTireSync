@@ -559,7 +559,7 @@ export default function InventoryPage() {
                 </div>
               </div>
               <div>
-                <Label htmlFor="name">Item Name</Label>
+                <Label htmlFor="name">Item Name *</Label>
                 <Input
                   id="name"
                   name="name"
@@ -581,7 +581,7 @@ export default function InventoryPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category">Category *</Label>
                 <Select
                   name="category"
                   value={currentForm.category}
