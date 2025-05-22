@@ -26,7 +26,8 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Calendar } from "@/components/ui/calendar";
-import { format, isSameDay } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
@@ -86,7 +87,8 @@ export default function QuotesPage() {
   const [showCustomItemForm, setShowCustomItemForm] = useState(false);
 
   const [recentQuotes, setRecentQuotes] = useState<Quote[]>([]);
-  const [filterSessionQuotesDate, setFilterSessionQuotesDate] = useState<Date | undefined>(undefined);
+  const [filterSessionQuotesDateRange, setFilterSessionQuotesDateRange] = useState<DateRange | undefined>(undefined);
+
 
   useEffect(() => {
     setSelectedQuoteDate(new Date());
@@ -374,9 +376,24 @@ export default function QuotesPage() {
   };
 
   const filteredSessionQuotes = useMemo(() => {
-    if (!filterSessionQuotesDate) return recentQuotes;
-    return recentQuotes.filter(quote => isSameDay(new Date(quote.quoteDate), filterSessionQuotesDate));
-  }, [recentQuotes, filterSessionQuotesDate]);
+    const { from, to } = filterSessionQuotesDateRange || {};
+    if (!from && !to) {
+      return recentQuotes;
+    }
+    return recentQuotes.filter(quote => {
+      const quoteDate = new Date(quote.quoteDate);
+      let passesFrom = true;
+      let passesTo = true;
+      if (from) {
+        passesFrom = quoteDate >= startOfDay(from);
+      }
+      if (to) {
+        passesTo = quoteDate <= endOfDay(to);
+      }
+      return passesFrom && passesTo;
+    });
+  }, [recentQuotes, filterSessionQuotesDateRange]);
+
 
   const handleEditQuote = (quoteId: string) => {
     toast({ title: "Not Implemented", description: `Editing quote ${quoteId.substring(0,10)}... functionality will be available soon.` });
@@ -561,90 +578,127 @@ export default function QuotesPage() {
         )}
       </Card>
 
-      {recentQuotes.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div><CardTitle>Recent Quotes This Session</CardTitle><CardDescription>Quotes created during this active session.</CardDescription></div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Popover>
-                  <PopoverTrigger asChild><Button variant="outline" className={cn("w-full sm:w-auto justify-start text-left font-normal", !filterSessionQuotesDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{filterSessionQuotesDate ? format(filterSessionQuotesDate, "PPP") : <span>Filter by Date...</span>}</Button></PopoverTrigger>
-                  <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={filterSessionQuotesDate} onSelect={setFilterSessionQuotesDate} initialFocus /></PopoverContent>
-                </Popover>
-                {filterSessionQuotesDate && (<Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setFilterSessionQuotesDate(undefined)}><FilterX className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Clear Date Filter</p></TooltipContent></Tooltip>)}
-              </div>
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle>Recent Quotes This Session</CardTitle>
+              <CardDescription>Quotes created during this active session.</CardDescription>
             </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Quote ID</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Items</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-center">Actions</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>{filteredSessionQuotes.map(quote => (
-                <TableRow key={quote.id}>
-                  <TableCell className="font-medium">{quote.id.substring(0,10)}...</TableCell>
-                  <TableCell>{format(new Date(quote.quoteDate), "PPp")}</TableCell>
-                  <TableCell>
-                    <div>{quote.customerName || 'N/A'}</div>
-                    {quote.contactNumber && <div className="text-xs text-muted-foreground">{quote.contactNumber}</div>}
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate">{quote.items.map(item => `${item.name} (x${item.quantity})`).join(', ')}</TableCell>
-                  <TableCell className="max-w-[150px] truncate">{quote.notes || 'N/A'}</TableCell>
-                  <TableCell className="text-right">$${quote.totalAmount.toFixed(2)}</TableCell>
-                  <TableCell className="text-center space-x-1">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => handleEditQuote(quote.id)}>
-                                <Edit3 className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Edit Quote</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => handlePrintSpecificQuote(quote)}>
-                                <Printer className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Print Quote</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => handleConvertToInvoice(quote.id)}>
-                                <FileOutput className="h-4 w-4" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Convert to Invoice</p></TooltipContent>
-                    </Tooltip>
-                     <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteQuote(quote.id)}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Delete Quote</p></TooltipContent>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}</TableBody>
-            </Table>
-            {filteredSessionQuotes.length === 0 && (<p className="py-4 text-center text-muted-foreground">{filterSessionQuotesDate ? 'No session quotes found for selected date.' : 'No quotes created this session.'}</p>)}
-          </CardContent>
-        </Card>
-      )}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn(
+                      "w-full sm:w-[300px] justify-start text-left font-normal",
+                      !filterSessionQuotesDateRange && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {filterSessionQuotesDateRange?.from ? (
+                      filterSessionQuotesDateRange.to ? (
+                        <>
+                          {format(filterSessionQuotesDateRange.from, "LLL dd, y")} -{" "}
+                          {format(filterSessionQuotesDateRange.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(filterSessionQuotesDateRange.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Filter by Date Range...</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={filterSessionQuotesDateRange?.from}
+                    selected={filterSessionQuotesDateRange}
+                    onSelect={setFilterSessionQuotesDateRange}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+              {(filterSessionQuotesDateRange?.from || filterSessionQuotesDateRange?.to) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={() => setFilterSessionQuotesDateRange(undefined)} aria-label="Clear date filter">
+                      <FilterX className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Clear Date Range Filter</p></TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Quote ID</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>Items</TableHead>
+              <TableHead>Notes</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-center">Actions</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{filteredSessionQuotes.map(quote => (
+              <TableRow key={quote.id}>
+                <TableCell className="font-medium">{quote.id.substring(0,10)}...</TableCell>
+                <TableCell>{format(new Date(quote.quoteDate), "PPp")}</TableCell>
+                <TableCell>
+                  <div>{quote.customerName || 'N/A'}</div>
+                  {quote.contactNumber && <div className="text-xs text-muted-foreground">{quote.contactNumber}</div>}
+                </TableCell>
+                <TableCell className="max-w-xs truncate">{quote.items.map(item => `${item.name} (x${item.quantity})`).join(', ')}</TableCell>
+                <TableCell className="max-w-[150px] truncate">{quote.notes || 'N/A'}</TableCell>
+                <TableCell className="text-right">$${quote.totalAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-center space-x-1">
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleEditQuote(quote.id)}>
+                              <Edit3 className="h-4 w-4" />
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Edit Quote</p></TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handlePrintSpecificQuote(quote)}>
+                              <Printer className="h-4 w-4" />
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Print Quote</p></TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleConvertToInvoice(quote.id)}>
+                              <FileOutput className="h-4 w-4" />
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Convert to Invoice</p></TooltipContent>
+                  </Tooltip>
+                   <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteQuote(quote.id)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Delete Quote</p></TooltipContent>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+          {filteredSessionQuotes.length === 0 && (<p className="py-4 text-center text-muted-foreground">{(filterSessionQuotesDateRange?.from || filterSessionQuotesDateRange?.to) ? 'No session quotes found for selected date range.' : 'No quotes created this session.'}</p>)}
+        </CardContent>
+      </Card>
     </div>
     </TooltipProvider>
   );
 }
-
-
-    
-
-    
 
