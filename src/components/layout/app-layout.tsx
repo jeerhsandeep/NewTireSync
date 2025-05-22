@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useRouter } from 'next/navigation';
+import { useRouter } from "next/navigation";
 import {
   SidebarProvider,
   Sidebar,
@@ -34,20 +34,58 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { signOut, sendPasswordResetEmail } from "firebase/auth";
+import { useToast } from "@/hooks/use-toast";
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+
   const [shopDetails, setShopDetails] = useState<{ shopName?: string } | null>(
     null
   );
-    const router = useRouter();
   const [showChangePasswordAlert, setShowChangePasswordAlert] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user?.email) {
+        toast({
+          title: "No email address found for the current user",
+          variant: "destructive",
+        });
+        router.push("/login");
+        return;
+      }
+      setIsSendingResetEmail(true);
+      await sendPasswordResetEmail(auth, user.email);
+      setResetEmailSent(true);
+    } catch (error) {
+      console.error("Error sending password reset email:", error);
+    } finally {
+      setIsSendingResetEmail(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      console.log("user changed", user);
+
       if (!user) {
         setShopDetails(null);
         return;
@@ -68,7 +106,9 @@ export function AppLayout({ children }: AppLayoutProps) {
         <SidebarHeader className="p-4">
           <div className="flex items-center gap-2">
             <Wrench className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold text-sidebar-foreground">TireSync</h1>
+            <h1 className="text-xl font-semibold text-sidebar-foreground">
+              TireSync
+            </h1>
           </div>
         </SidebarHeader>
         <SidebarContent>
@@ -77,22 +117,31 @@ export function AppLayout({ children }: AppLayoutProps) {
         <SidebarFooter className="p-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
                 <UserCircle className="h-5 w-5" />
                 <span>{shopDetails?.shopName || "Shop Name"}</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent sideOffset={5} align="start" className="w-56 bg-popover text-popover-foreground">
-              <DropdownMenuItem onClick={() => router.push('/my-account')}>
+            <DropdownMenuContent
+              sideOffset={5}
+              align="start"
+              className="w-56 bg-popover text-popover-foreground"
+            >
+              <DropdownMenuItem onClick={() => router.push("/my-account")}>
                 <UserCog className="mr-2 h-4 w-4" />
                 <span>My Account</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowChangePasswordAlert(true)}>
+              <DropdownMenuItem
+                onClick={() => setShowChangePasswordAlert(true)}
+              >
                 <KeyRound className="mr-2 h-4 w-4" />
                 <span>Change Password</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push('/login')}>
+              <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Logout</span>
               </DropdownMenuItem>
@@ -106,16 +155,37 @@ export function AppLayout({ children }: AppLayoutProps) {
           {children}
         </main>
       </SidebarInset>
-      <AlertDialog open={showChangePasswordAlert} onOpenChange={setShowChangePasswordAlert}>
+      <AlertDialog
+        open={showChangePasswordAlert}
+        onOpenChange={setShowChangePasswordAlert}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Password Reset</AlertDialogTitle>
             <AlertDialogDescription>
-              Please check your email to change your password.
+              {resetEmailSent
+                ? "Password reset email has been sent. Please check your inbox."
+                : "We'll send you an email with instructions to reset your password."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setShowChangePasswordAlert(false)}>OK</AlertDialogAction>
+            {!resetEmailSent && (
+              <Button
+                onClick={handlePasswordReset}
+                disabled={isSendingResetEmail}
+                className={`${isSendingResetEmail && "opacity-50"}`}
+              >
+                {isSendingResetEmail ? "Sending..." : "Send Reset Email"}
+              </Button>
+            )}
+            <AlertDialogAction
+              onClick={() => {
+                setShowChangePasswordAlert(false);
+                setResetEmailSent(false);
+              }}
+            >
+              {resetEmailSent ? "OK" : "Cancel"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -136,5 +206,3 @@ function AppHeader() {
     </header>
   );
 }
-
-
