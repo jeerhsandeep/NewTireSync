@@ -39,7 +39,7 @@ import {
   FileOutput,
   Loader2,
 } from "lucide-react";
-import type { QuoteItem, InventoryItem, Quote } from "@/types";
+import type { QuoteItem, InventoryItem, Quote, SaleTransaction } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -231,6 +231,8 @@ export default function QuotesPage() {
     useState<DateRange | undefined>(undefined);
 
   const [quoteToDelete, setQuoteToDelete] = useState<Quote | null>(null);
+  const [quoteToEdit, setQuoteToEdit] = useState<Quote | null>(null);
+
   const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredQuotes = useMemo(() => {
@@ -344,6 +346,32 @@ export default function QuotesPage() {
 
     return () => unsubscribe(); // Cleanup the listener on component unmount
   }, []);
+
+  useEffect(() => {
+    if (quoteToEdit) {
+      setCustomerName(quoteToEdit.customerName || "N/A");
+      setContactNumber(
+        quoteToEdit?.contactNumber
+          ? quoteToEdit.contactNumber === "N/A"
+            ? ""
+            : quoteToEdit.contactNumber
+          : ""
+      );
+      setCustomerEmail(quoteToEdit.customerEmail || "N/A");
+      setCarModel(quoteToEdit.carModel || "N/A");
+      setNotes(quoteToEdit.notes || "N/A");
+      setApplyTax(quoteToEdit.taxRateApplied === TAX_RATE_VALUE);
+      setCurrentQuoteItems(quoteToEdit.items || []);
+      setSubtotal(quoteToEdit.subtotal || 0);
+      setTaxAmount(quoteToEdit.taxAmount || 0);
+      setTotalAmount(quoteToEdit.totalAmount || 0);
+      setSelectedQuoteDate(
+        quoteToEdit.quoteDate instanceof Date
+          ? quoteToEdit.quoteDate
+          : (quoteToEdit.quoteDate as Timestamp).toDate()
+      );
+    }
+  }, [quoteToEdit]);
 
   const handleAddItem = (e: FormEvent) => {
     e.preventDefault();
@@ -537,7 +565,7 @@ export default function QuotesPage() {
       }
       const userEmail = user.email || "unknown_user";
 
-      const quoteId = `QT-${Date.now()}`;
+      const quoteId = quoteToEdit?.id || `QT-${Date.now()}`;
       const quoteData: Quote = {
         id: quoteId,
         items: currentQuoteItems,
@@ -556,14 +584,22 @@ export default function QuotesPage() {
       const quoteRef = doc(db, "sales", userEmail, "userQuotes", quoteId);
       await setDoc(quoteRef, quoteData);
 
-      setUserQuotes((prevQuotes) => [...prevQuotes, quoteData]);
-      if (contactNumber) {
+      if (quoteToEdit) {
+        setUserQuotes((prevQuotes) =>
+          prevQuotes.map((q) => (q.id === quoteToEdit.id ? quoteData : q))
+        );
+      } else {
+        setUserQuotes((prevQuotes) => [...prevQuotes, quoteData]);
+      }
+
+      // Only save customer details if contact number is provided and not "N/A"
+      if (contactNumber && contactNumber !== "N/A") {
         const customerRef = doc(
           db,
           "customers",
-          userEmail, // User's email
-          "contactNumbers", // Subcollection for contact numbers
-          contactNumber // Document ID
+          userEmail,
+          "contactNumbers",
+          contactNumber
         );
 
         const existingCustomer = customers.find(
@@ -604,14 +640,9 @@ export default function QuotesPage() {
         }
       }
 
-      toast({
-        title: "Quote Saved",
-        description: `Quote ${quoteId} for ${
-          quoteData.customerName || "N/A"
-        } saved.`,
-      });
-      // here
-
+      if (quoteData) {
+        setQuoteToEdit(null);
+      }
       toast({
         title: "Quote Saved",
         description: `Quote ${quoteId} for ${
@@ -791,6 +822,10 @@ export default function QuotesPage() {
       setUserQuotes((prevQuotes) =>
         prevQuotes.filter((q) => q.id !== quoteToDelete?.id)
       );
+      if (quoteToDelete.id === quoteToEdit?.id) {
+        setQuoteToEdit(null);
+        resetForm();
+      }
       setQuoteToDelete(null);
       toast({
         title: "Quote Deleted",
@@ -836,27 +871,36 @@ export default function QuotesPage() {
     console.log("Attempting to edit quote:", quoteId);
   };
 
-  const handleConvertToInvoice = (quoteId: string) => {
-    toast({
-      title: "Not Implemented",
-      description: `Converting quote ${quoteId.substring(
-        0,
-        10
-      )}... to invoice will be available soon.`,
-    });
-    console.log("Attempting to convert quote to invoice:", quoteId);
-  };
-
   return (
     <TooltipProvider>
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Customer & Vehicle Details for Quote</CardTitle>
-            <CardDescription>
-              Enter customer and vehicle information. Search or enter a contact
-              number to auto-fill details.
-            </CardDescription>
+            <div className="flex justify-between items-center w-full">
+              <div>
+                <CardTitle>
+                  {quoteToEdit ? "Edit Quote" : "Create New Quote"}
+                </CardTitle>
+                <CardDescription>
+                  Enter customer and vehicle information. Search or enter a
+                  contact number to auto-fill details.
+                </CardDescription>
+              </div>
+
+              {quoteToEdit && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setQuoteToEdit(null);
+                      resetForm();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -1504,8 +1548,8 @@ export default function QuotesPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell className="font-medium">
-                      <div className="flex justify-center items-center py-4 w-full">
+                    <TableCell colSpan={7} className="text-center">
+                      <div className="flex justify-center items-center py-4">
                         <svg
                           className="animate-spin h-6 w-6 text-primary"
                           xmlns="http://www.w3.org/2000/svg"
@@ -1531,98 +1575,13 @@ export default function QuotesPage() {
                   </TableRow>
                 ) : (
                   filteredQuotes?.map((quote) => (
-                    <TableRow key={quote.id}>
-                      <TableCell className="font-medium">
-                        {quote.id.substring(0, 10)}...
-                      </TableCell>
-                      <TableCell>
-                        {format(
-                          quote.quoteDate instanceof Date
-                            ? quote.quoteDate
-                            : (quote.quoteDate as Timestamp).toDate(),
-                          "PPP"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div>{quote.customerName || "N/A"}</div>
-                        {quote.contactNumber && (
-                          <div className="text-xs text-muted-foreground">
-                            {quote.contactNumber}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {quote.items
-                          .map((item) => `${item.name} (x${item.quantity})`)
-                          .join(", ")}
-                      </TableCell>
-                      <TableCell className="max-w-[150px] truncate">
-                        {quote.notes || "N/A"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        $${quote.totalAmount.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-center space-x-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditQuote(quote.id)}
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Edit Quote</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handlePrintSpecificQuote(quote)}
-                            >
-                              <Printer className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Print Quote</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleConvertToInvoice(quote.id)}
-                            >
-                              <FileOutput className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Convert to Invoice</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setQuoteToDelete(quote);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Delete Quote</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
+                    <TableRows
+                      key={quote.id}
+                      quote={quote}
+                      setQuoteToEdit={setQuoteToEdit}
+                      handlePrintSpecificQuote={handlePrintSpecificQuote}
+                      setQuoteToDelete={setQuoteToDelete}
+                    />
                   ))
                 )}
               </TableBody>
@@ -1686,5 +1645,176 @@ const DeleteConfirmationDialog = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+};
+
+const TableRows = ({
+  quote,
+  setQuoteToEdit,
+  handlePrintSpecificQuote,
+  setQuoteToDelete,
+}: {
+  quote: Quote;
+  setQuoteToEdit: (quote: Quote | null) => void;
+  handlePrintSpecificQuote: (quote: Quote) => void;
+  setQuoteToDelete: (quote: Quote | null) => void;
+}) => {
+  const [isConvertingToInvoice, setIsConvertingToInvoice] = useState(false);
+  const { toast } = useToast();
+
+  const handleConvertToInvoice = async (quote: Quote) => {
+    const userEmail = auth.currentUser?.email;
+    if (!userEmail) return;
+
+    try {
+      setIsConvertingToInvoice(true);
+      const saleId = `sale-${Date.now()}`;
+      const saleData = {
+        id: saleId,
+        items: quote.items,
+        subtotal: quote.subtotal,
+        taxAmount: quote.taxAmount,
+        totalAmount: quote.totalAmount,
+        profit: 0,
+        timestamp: quote.quoteDate || new Date(),
+        customerName: quote.customerName || "N/A",
+        contactNumber: quote.contactNumber || "N/A",
+        customerEmail: quote.customerEmail || "N/A",
+        carModel: quote.carModel || "N/A",
+        vin: "N/A",
+        odometer: "N/A",
+        paymentMethod: "N/A",
+        hstRate: quote.taxRateApplied,
+        notes: quote.notes || "N/A",
+        invoiceNumber: 0,
+      };
+      const saleRef = doc(db, "sales", userEmail, "userSales", saleId);
+      await setDoc(saleRef, saleData);
+
+      toast({
+        title: "Success",
+        description: "Quote converted to invoice successfully.",
+      });
+      console.log({ saleData });
+    } catch (error) {
+      console.error("Error converting quote to invoice:", error);
+      toast({
+        title: "Error",
+        description: "Failed to convert quote to invoice.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConvertingToInvoice(false);
+    }
+    // toast({
+    //   title: "Not Implemented",
+    //   description: `Converting quote ${quote.id.substring(
+    //     0,
+    //     10
+    //   )}... to invoice will be available soon.`,
+    // });
+  };
+
+  return (
+    <TableRow key={quote.id}>
+      <TableCell className="font-medium">
+        {quote.id.substring(0, 10)}...
+      </TableCell>
+      <TableCell>
+        {format(
+          quote.quoteDate instanceof Date
+            ? quote.quoteDate
+            : (quote.quoteDate as Timestamp).toDate(),
+          "PPP"
+        )}
+      </TableCell>
+      <TableCell>
+        <div>{quote.customerName || "N/A"}</div>
+        {quote.contactNumber && (
+          <div className="text-xs text-muted-foreground">
+            {quote.contactNumber}
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="max-w-xs truncate">
+        {quote.items
+          .map((item) => `${item.name} (x${item.quantity})`)
+          .join(", ")}
+      </TableCell>
+      <TableCell className="max-w-[150px] truncate">
+        {quote.notes || "N/A"}
+      </TableCell>
+      <TableCell className="text-right">
+        ${quote.totalAmount.toFixed(2)}
+      </TableCell>
+      <TableCell className="text-center space-x-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setQuoteToEdit(null);
+                setTimeout(() => setQuoteToEdit(quote), 0);
+              }}
+            >
+              <Edit3 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Edit Quote</p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handlePrintSpecificQuote(quote)}
+            >
+              <Printer className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Print Quote</p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleConvertToInvoice(quote)}
+              disabled={isConvertingToInvoice}
+            >
+              {isConvertingToInvoice ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileOutput className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Convert to Invoice</p>
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setQuoteToDelete(quote);
+              }}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Delete Quote</p>
+          </TooltipContent>
+        </Tooltip>
+      </TableCell>
+    </TableRow>
   );
 };
