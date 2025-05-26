@@ -184,9 +184,13 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [invoiceNumber, setInvoiceNumber] = useState(1000); // Default starting invoice number
+  // const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({
+  //   from: startOfDay(new Date()),
+  //   to: endOfDay(new Date()),
+  // });
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({
-    from: startOfDay(new Date()),
-    to: endOfDay(new Date()),
+    from: undefined,
+    to: undefined,
   });
   const [customerSearchTerm, setCustomerSearchTerm] = useState("");
   const filteredSalesData = useMemo(() => {
@@ -248,11 +252,15 @@ export default function SalesPage() {
         const salesCollection = collection(db, "sales", userEmail, "userSales");
         const querySnapshot = await getDocs(salesCollection);
 
-        const sales = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          timestamp: doc.data().timestamp.toDate(), // Convert Firestore timestamp to JS Date
-        })) as SaleTransaction[];
+        const sales = querySnapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            timestamp: doc.data().timestamp.toDate(), // Convert Firestore timestamp to JS Date
+          }))
+          .sort(
+            (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
+          ) as SaleTransaction[];
 
         setSalesData(sales);
         // Fetch customers
