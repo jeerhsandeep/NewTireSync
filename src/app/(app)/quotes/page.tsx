@@ -329,11 +329,12 @@ export default function QuotesPage() {
           ...doc.data(),
         })) as InventoryItem[];
 
-        const filteredInventoryData = inventoryData.filter(
-          (item) => item.stock > 0
-        );
+        const newInventoryData = inventoryData.map((item) => ({
+          ...item,
+          outOfStock: item.stock <= 0,
+        }));
 
-        setInventory(filteredInventoryData);
+        setInventory(newInventoryData);
 
         // Set default sale date
         setSelectedQuoteDate(new Date());
@@ -1194,12 +1195,19 @@ export default function QuotesPage() {
                                 key={item.id}
                                 value={item.name}
                                 onSelect={() => {
-                                  setCurrentItem((prev) => ({
-                                    ...prev,
-                                    inventoryItemId: item.id,
-                                  }));
-                                  setOpenItemCombobox(false);
+                                  if (!item.outOfStock) {
+                                    setCurrentItem((prev) => ({
+                                      ...prev,
+                                      inventoryItemId: item.id,
+                                    }));
+                                    setOpenItemCombobox(false);
+                                  }
                                 }}
+                                className={cn(
+                                  item.outOfStock &&
+                                    "opacity-50 cursor-not-allowed"
+                                )}
+                                disabled={item.outOfStock}
                               >
                                 <Check
                                   className={cn(
@@ -1209,7 +1217,14 @@ export default function QuotesPage() {
                                       : "opacity-0"
                                   )}
                                 />
-                                {item.name} ($ {item.retailPrice})
+                                <span>
+                                  {item.name} ($ {item.retailPrice})
+                                  {item.outOfStock && (
+                                    <span className="text-red-500 ps-1">
+                                      Out of Stock
+                                    </span>
+                                  )}
+                                </span>
                               </CommandItem>
                             ))
                           )}

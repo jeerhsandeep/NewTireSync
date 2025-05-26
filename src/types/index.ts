@@ -8,6 +8,7 @@ export interface InventoryItem {
   retailPrice: number;
   lowStockThreshold: number;
   category: string;
+  outOfStock?: boolean;
 }
 
 export interface SaleItem {
