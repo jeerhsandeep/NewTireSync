@@ -7,13 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-} from "@/components/ui/chart";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -150,7 +143,6 @@ interface MockCustomer {
   notes?: string;
 }
 
-
 export default function SalesPage() {
   const { toast } = useToast();
   const [currentItem, setCurrentItem] = useState<{
@@ -190,41 +182,40 @@ export default function SalesPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [customers, setCustomers] = useState<MockCustomer[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [invoiceNumber, setInvoiceNumber] = useState(1000); // Default starting invoice number
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({
-      from: startOfDay(new Date()),
-      to: endOfDay(new Date()),
-    });
-const [customerSearchTerm, setCustomerSearchTerm] = useState("");
-    const filteredSalesData = useMemo(() => {
-      let intermediateFilteredSales = salesData;
-  
-      if (customerSearchTerm) {
-        intermediateFilteredSales = intermediateFilteredSales.filter(
-          (sale) => sale.contactNumber === customerSearchTerm
-        );
-      }
-  
-      const { from, to } = dateRange;
-      if (from || to) {
-        const startDate = from ? startOfDay(from) : null;
-        const endDate = to ? endOfDay(to) : null;
-  
-        return intermediateFilteredSales.filter((sale) => {
-          const saleTimestamp = sale.timestamp;
-          if (startDate && saleTimestamp < startDate) return false;
-          if (endDate && saleTimestamp > endDate) return false;
-          return true;
-        });
-      }
-  
-      return intermediateFilteredSales;
-    }, [salesData, dateRange, customerSearchTerm]);
+    from: startOfDay(new Date()),
+    to: endOfDay(new Date()),
+  });
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const filteredSalesData = useMemo(() => {
+    let intermediateFilteredSales = salesData;
+
+    if (customerSearchTerm) {
+      intermediateFilteredSales = intermediateFilteredSales.filter(
+        (sale) => sale.contactNumber === customerSearchTerm
+      );
+    }
+
+    const { from, to } = dateRange;
+    if (from || to) {
+      const startDate = from ? startOfDay(from) : null;
+      const endDate = to ? endOfDay(to) : null;
+
+      return intermediateFilteredSales.filter((sale) => {
+        const saleTimestamp = sale.timestamp;
+        if (startDate && saleTimestamp < startDate) return false;
+        if (endDate && saleTimestamp > endDate) return false;
+        return true;
+      });
+    }
+
+    return intermediateFilteredSales;
+  }, [salesData, dateRange, customerSearchTerm]);
 
   useEffect(() => {
     const initializeData = async () => {
-      setLoading(true); // Start loading
       try {
         const user = auth.currentUser;
         if (!user) {
@@ -254,6 +245,16 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
         })) as InventoryItem[];
         setInventory(inventoryData);
 
+        const salesCollection = collection(db, "sales", userEmail, "userSales");
+        const querySnapshot = await getDocs(salesCollection);
+
+        const sales = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          timestamp: doc.data().timestamp.toDate(), // Convert Firestore timestamp to JS Date
+        })) as SaleTransaction[];
+
+        setSalesData(sales);
         // Fetch customers
         const customersCollection = collection(
           db,
@@ -278,7 +279,7 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
           variant: "destructive",
         });
       } finally {
-        setLoading(false); // Stop loading
+        setIsLoading(false); // Stop loading
       }
     };
 
@@ -299,6 +300,7 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
     return () => unsubscribe(); // Cleanup the listener on component unmount
   }, []);
 
+  console.log({ isLoading });
   useEffect(() => {
     const newSubtotal = currentSaleItems.reduce(
       (acc, item) => acc + item.unitPrice * item.quantity,
@@ -1001,23 +1003,23 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
   };
 
   interface ReportCustomer {
-  contactNumber: string;
-  customerName: string;
-}
- const [customerSearchPopoverOpen, setCustomerSearchPopoverOpen] =
+    contactNumber: string;
+    customerName: string;
+  }
+  const [customerSearchPopoverOpen, setCustomerSearchPopoverOpen] =
     useState(false);
   const [selectedCustomerDisplayName, setSelectedCustomerDisplayName] =
     useState("");
-    const [saleToDelete, setSaleToDelete] = useState<SaleTransaction | null>(
-        null
-      );
-      const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<SaleTransaction | null>(
+    null
+  );
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
-     const [
-        currentCustomerCommandInputValue,
-        setCurrentCustomerCommandInputValue,
-      ] = useState("");
-    const handleSelectCustomer = (customer: ReportCustomer) => {
+  const [
+    currentCustomerCommandInputValue,
+    setCurrentCustomerCommandInputValue,
+  ] = useState("");
+  const handleSelectCustomer = (customer: ReportCustomer) => {
     setCustomerSearchTerm(customer.contactNumber);
     setSelectedCustomerDisplayName(customer.customerName);
     setCurrentCustomerCommandInputValue(
@@ -1026,10 +1028,9 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
     setCustomerSearchPopoverOpen(false);
   };
   const handleDeleteSale = (sale: SaleTransaction) => {
-      setSaleToDelete(sale);
-      setIsConfirmModalOpen(true); // Open the confirmation modal
-    };
-  
+    setSaleToDelete(sale);
+    setIsConfirmModalOpen(true); // Open the confirmation modal
+  };
 
   return (
     <div className="space-y-6">
@@ -1119,7 +1120,7 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                  {loading ? (
+                  {isLoading ? (
                     <div className="flex justify-center items-center py-4">
                       <svg
                         className="animate-spin h-6 w-6 text-primary"
@@ -1337,7 +1338,7 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                  {loading ? (
+                  {isLoading ? (
                     <div className="flex justify-center items-center py-4">
                       <svg
                         className="animate-spin h-6 w-6 text-primary"
@@ -1671,7 +1672,7 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
                 Grand Total: ${totalAmount.toFixed(2)}
               </div>
             </div>
-           
+
             <Button
               size="lg"
               onClick={handleFinalizeSale}
@@ -1713,129 +1714,124 @@ const [customerSearchTerm, setCustomerSearchTerm] = useState("");
       </Card>
 
       <Card>
-                  <CardHeader>
-                    <CardTitle>Recent Sales Transactions</CardTitle>
-                    <CardDescription>
-                      Showing transactions for the selected filters.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoading ? (
-                      <div className="flex justify-center items-center h-64">
-                        <svg
-                          className="animate-spin h-8 w-8 text-primary"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                      </div>
-                    ) : (
-                      <>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Car Model</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Customer</TableHead>
-                              <TableHead>Items</TableHead>
-                              <TableHead className="text-right">
-                                Total Amount
-                              </TableHead>
-                              <TableHead className="text-right">Profit</TableHead>
-                              <TableHead className="text-center">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredSalesData.slice(0, 100).map((sale) => (
-                              <TableRow key={sale.id}>
-                                <TableCell className="font-medium">
-                                  {sale.carModel+"a"}
-                                </TableCell>
-                                <TableCell>
-                                  {sale.timestamp.toLocaleString()}
-                                </TableCell>
-                                <TableCell>
-                                  {sale.customerName || "N/A"} <br />{" "}
-                                  <span className="text-xs text-muted-foreground">
-                                    {sale.contactNumber}
-                                  </span>
-                                </TableCell>
-                                <TableCell>
-                                  {sale.items
-                                    .map((item) => `${item.name} (x${item.quantity})`)
-                                    .join(", ")}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  ${sale.totalAmount.toFixed(2)}
-                                </TableCell>
-                                <TableCell className="text-right text-green-600 dark:text-green-400">
-                                  ${sale.profit.toFixed(2)}
-                                </TableCell>
-                                <TableCell className="text-center space-x-1">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handlePrintInvoice(sale)}
-                                      >
-                                        <Printer className="h-4 w-4 text-primary" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Print Invoice</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleDeleteSale(sale)}
-                                      >
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Delete Sale</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        {filteredSalesData.length === 0 && (
-                          <p className="py-4 text-center text-muted-foreground">
-                            No sales transactions found for the selected filters.
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </CardContent>
-                  {filteredSalesData.length > 100 && (
-                    <CardFooter>
-                      <p className="text-xs text-muted-foreground">
-                        Showing first 100 of {filteredSalesData.length} sales.
-                      </p>
-                    </CardFooter>
-                  )}
-                </Card>
-
+        <CardHeader>
+          <CardTitle>Recent Sales Transactions</CardTitle>
+          <CardDescription>
+            Showing transactions for the selected filters.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-64">
+              <svg
+                className="animate-spin h-8 w-8 text-primary"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Car Model</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Items</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
+                    <TableHead className="text-right">Profit</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSalesData.slice(0, 100).map((sale) => (
+                    <TableRow key={sale.id}>
+                      <TableCell className="font-medium">
+                        {sale.carModel + "a"}
+                      </TableCell>
+                      <TableCell>{sale.timestamp.toLocaleString()}</TableCell>
+                      <TableCell>
+                        {sale.customerName || "N/A"} <br />{" "}
+                        <span className="text-xs text-muted-foreground">
+                          {sale.contactNumber}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {sale.items
+                          .map((item) => `${item.name} (x${item.quantity})`)
+                          .join(", ")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${sale.totalAmount.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right text-green-600 dark:text-green-400">
+                        ${sale.profit.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-center space-x-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handlePrintInvoice(sale)}
+                            >
+                              <Printer className="h-4 w-4 text-primary" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Print Invoice</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteSale(sale)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Delete Sale</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {!isLoading && filteredSalesData.length === 0 && (
+                <p className="py-4 text-center text-muted-foreground">
+                  No sales transactions found for the selected filters.
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+        {!isLoading && filteredSalesData.length > 100 && (
+          <CardFooter>
+            <p className="text-xs text-muted-foreground">
+              Showing first 100 of {filteredSalesData.length} sales.
+            </p>
+          </CardFooter>
+        )}
+      </Card>
     </div>
   );
 }

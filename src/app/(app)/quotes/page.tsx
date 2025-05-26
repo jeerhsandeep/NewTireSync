@@ -88,62 +88,62 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 
 // Mock inventory for item selection (can be shared or a subset)
-const mockInventory: InventoryItem[] = [
-  {
-    id: "tire001",
-    name: "Performance Radial 205/55R16",
-    stock: 50,
-    costPrice: 75,
-    retailPrice: 120,
-    lowStockThreshold: 10,
-    category: "Tires",
-  },
-  {
-    id: "tire002",
-    name: "All-Season Touring 195/65R15",
-    stock: 8,
-    costPrice: 60,
-    retailPrice: 100,
-    lowStockThreshold: 10,
-    category: "Tires",
-  },
-  {
-    id: "oil001",
-    name: "Synthetic Oil 5W-30 (1 Qt)",
-    stock: 100,
-    costPrice: 5,
-    retailPrice: 9,
-    lowStockThreshold: 20,
-    category: "Oil",
-  },
-  {
-    id: "filter001",
-    name: "Oil Filter XYZ",
-    stock: 30,
-    costPrice: 3,
-    retailPrice: 7,
-    lowStockThreshold: 15,
-    category: "Filters",
-  },
-  {
-    id: "service001",
-    name: "Oil Change Service",
-    stock: 999,
-    costPrice: 15,
-    retailPrice: 45,
-    lowStockThreshold: 0,
-    category: "Services",
-  },
-  {
-    id: "service002",
-    name: "Tire Rotation",
-    stock: 999,
-    costPrice: 5,
-    retailPrice: 25,
-    lowStockThreshold: 0,
-    category: "Services",
-  },
-];
+// const mockInventory: InventoryItem[] = [
+//   {
+//     id: "tire001",
+//     name: "Performance Radial 205/55R16",
+//     stock: 50,
+//     costPrice: 75,
+//     retailPrice: 120,
+//     lowStockThreshold: 10,
+//     category: "Tires",
+//   },
+//   {
+//     id: "tire002",
+//     name: "All-Season Touring 195/65R15",
+//     stock: 8,
+//     costPrice: 60,
+//     retailPrice: 100,
+//     lowStockThreshold: 10,
+//     category: "Tires",
+//   },
+//   {
+//     id: "oil001",
+//     name: "Synthetic Oil 5W-30 (1 Qt)",
+//     stock: 100,
+//     costPrice: 5,
+//     retailPrice: 9,
+//     lowStockThreshold: 20,
+//     category: "Oil",
+//   },
+//   {
+//     id: "filter001",
+//     name: "Oil Filter XYZ",
+//     stock: 30,
+//     costPrice: 3,
+//     retailPrice: 7,
+//     lowStockThreshold: 15,
+//     category: "Filters",
+//   },
+//   {
+//     id: "service001",
+//     name: "Oil Change Service",
+//     stock: 999,
+//     costPrice: 15,
+//     retailPrice: 45,
+//     lowStockThreshold: 0,
+//     category: "Services",
+//   },
+//   {
+//     id: "service002",
+//     name: "Tire Rotation",
+//     stock: 999,
+//     costPrice: 5,
+//     retailPrice: 25,
+//     lowStockThreshold: 0,
+//     category: "Services",
+//   },
+// ];
 
 interface MockCustomer {
   contactNumber: string;
@@ -200,7 +200,7 @@ export default function QuotesPage() {
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [customers, setCustomers] = useState<MockCustomer[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [customerName, setCustomerName] = useState("");
@@ -224,8 +224,8 @@ export default function QuotesPage() {
   const [customItemCostPrice, setCustomItemCostPrice] = useState(""); // For internal reference
   const [showCustomItemForm, setShowCustomItemForm] = useState(false);
 
-  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
   const [userQuotes, setUserQuotes] = useState<Quote[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
 
   const [filterSessionQuotesDateRange, setFilterSessionQuotesDateRange] =
     useState<DateRange | undefined>(undefined);
@@ -275,7 +275,6 @@ export default function QuotesPage() {
     setSelectedQuoteDate(new Date());
 
     const initializeData = async () => {
-      setLoading(true); // Start loading
       try {
         const user = auth.currentUser;
         if (!user) {
@@ -316,6 +315,25 @@ export default function QuotesPage() {
           ...doc.data(),
         })) as MockCustomer[];
         setCustomers(customerData);
+
+        const inventoryCollection = collection(
+          db,
+          "inventory",
+          userEmail,
+          "userInventory"
+        );
+        const querySnapshot = await getDocs(inventoryCollection);
+
+        const inventoryData = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as InventoryItem[];
+
+        const filteredInventoryData = inventoryData.filter(
+          (item) => item.stock > 0
+        );
+
+        setInventory(filteredInventoryData);
 
         // Set default sale date
         setSelectedQuoteDate(new Date());
@@ -383,7 +401,7 @@ export default function QuotesPage() {
       });
       return;
     }
-    const selectedInventoryItem = mockInventory.find(
+    const selectedInventoryItem = inventory.find(
       (invItem) => invItem.id === currentItem.inventoryItemId
     );
     if (!selectedInventoryItem) {
@@ -1132,7 +1150,7 @@ export default function QuotesPage() {
                       className="w-full justify-between mt-1"
                     >
                       {currentItem.inventoryItemId
-                        ? mockInventory.find(
+                        ? inventory.find(
                             (item) => item.id === currentItem.inventoryItemId
                           )?.name
                         : "Select item..."}
@@ -1142,32 +1160,59 @@ export default function QuotesPage() {
                   <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                     <Command>
                       <CommandInput placeholder="Search item..." />
-                      <CommandEmpty>No item found.</CommandEmpty>
+                      {!loading && !inventory.length && (
+                        <CommandEmpty>No item found.</CommandEmpty>
+                      )}
                       <CommandList>
                         <CommandGroup>
-                          {mockInventory.map((item) => (
-                            <CommandItem
-                              key={item.id}
-                              value={item.name}
-                              onSelect={() => {
-                                setCurrentItem((prev) => ({
-                                  ...prev,
-                                  inventoryItemId: item.id,
-                                }));
-                                setOpenItemCombobox(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  currentItem.inventoryItemId === item.id
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              {item.name} ($ {item.retailPrice})
-                            </CommandItem>
-                          ))}
+                          {loading ? (
+                            <div className="flex justify-center items-center py-4">
+                              <svg
+                                className="animate-spin h-6 w-6 text-primary"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                ></circle>
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                ></path>
+                              </svg>
+                            </div>
+                          ) : (
+                            inventory.map((item) => (
+                              <CommandItem
+                                key={item.id}
+                                value={item.name}
+                                onSelect={() => {
+                                  setCurrentItem((prev) => ({
+                                    ...prev,
+                                    inventoryItemId: item.id,
+                                  }));
+                                  setOpenItemCombobox(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    currentItem.inventoryItemId === item.id
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                {item.name} ($ {item.retailPrice})
+                              </CommandItem>
+                            ))
+                          )}
                         </CommandGroup>
                       </CommandList>
                     </Command>
@@ -1581,6 +1626,7 @@ export default function QuotesPage() {
                       setQuoteToEdit={setQuoteToEdit}
                       handlePrintSpecificQuote={handlePrintSpecificQuote}
                       setQuoteToDelete={setQuoteToDelete}
+                      setUserQuotes={setUserQuotes}
                     />
                   ))
                 )}
@@ -1653,11 +1699,13 @@ const TableRows = ({
   setQuoteToEdit,
   handlePrintSpecificQuote,
   setQuoteToDelete,
+  setUserQuotes,
 }: {
   quote: Quote;
   setQuoteToEdit: (quote: Quote | null) => void;
   handlePrintSpecificQuote: (quote: Quote) => void;
   setQuoteToDelete: (quote: Quote | null) => void;
+  setUserQuotes: React.Dispatch<React.SetStateAction<Quote[]>>;
 }) => {
   const [isConvertingToInvoice, setIsConvertingToInvoice] = useState(false);
   const { toast } = useToast();
@@ -1690,6 +1738,13 @@ const TableRows = ({
       };
       const saleRef = doc(db, "sales", userEmail, "userSales", saleId);
       await setDoc(saleRef, saleData);
+
+      const quoteRef = doc(db, "sales", userEmail, "userQuotes", quote.id);
+      await deleteDoc(quoteRef);
+
+      setUserQuotes((prevQuotes) =>
+        prevQuotes.filter((q) => q.id !== quote.id)
+      );
 
       toast({
         title: "Success",
