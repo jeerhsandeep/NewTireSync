@@ -1,17 +1,33 @@
 "use client";
 
-import type { ChangeEvent, FormEvent } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import type { ChangeEvent, FormEvent } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Building, Mail, User, Phone, MapPin, Save, LockKeyhole } from "lucide-react";
-import { Separator } from '@/components/ui/separator';
+import {
+  Building,
+  Mail,
+  User,
+  Phone,
+  MapPin,
+  Save,
+  LockKeyhole,
+  Loader2,
+} from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { auth, db } from "@/lib/firebaseConfig";
-import { doc, getDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,68 +42,172 @@ interface AccountDetails {
   contactPersonName: string;
   businessContactNumber: string;
   businessAddress: string;
+  shopName: string;
+  email: string;
+  contactPersonPhone: string;
+  reportEmail: string;
+  reportPassword: string;
 }
 
 export default function MyAccountPage() {
   const { toast } = useToast();
   const [accountDetails, setAccountDetails] = useState<AccountDetails>({
-    contactPersonName: "Admin User",
-    businessContactNumber: "(555) 123-4567",
-    businessAddress: "123 Performance Ave, Gearsville, ON M1S 2T3",
+    contactPersonName: "",
+    businessContactNumber: "",
+    businessAddress: "",
+    shopName: "",
+    email: "",
+    contactPersonPhone: "",
+    reportEmail: "",
+    reportPassword: "",
   });
-  const [shopDetails, setShopDetails] = useState<{ shopName?: string, email?: string, phoneNumber?: string, address?: string , reportEmail?: string, contactPerson?: string, contactPersonPhone?: string, reportPassword?: string} | null>(
-      null
-    );
-  const [showResetReportsPasswordAlert, setShowResetReportsPasswordAlert] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [shopDetails, setShopDetails] = useState<{
+    shopName?: string;
+    email?: string;
+    phoneNumber?: string;
+    address?: string;
+    reportEmail?: string;
+    contactPerson?: string;
+    contactPersonPhone?: string;
+    reportPassword?: string;
+  } | null>(null);
+  const [showResetReportsPasswordAlert, setShowResetReportsPasswordAlert] =
+    useState(false);
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const [isPending, setIsPending] = useState(false);
+  const [isSavingReportsData, setIsSavingReportsData] = useState(false);
+
+  const formatPhoneNumber = (value: string) => {
+    // Remove all non-numeric characters
+    const numbers = value.replace(/\D/g, "");
+
+    // Format the number as (XXX) XXX-XXXX
+    if (numbers.length <= 3) {
+      return numbers;
+    } else if (numbers.length <= 6) {
+      return `(${numbers.slice(0, 3)}) ${numbers.slice(3)}`;
+    } else {
+      return `(${numbers.slice(0, 3)}) ${numbers.slice(3, 6)}-${numbers.slice(
+        6,
+        10
+      )}`;
+    }
+  };
+
+  const handleInputChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
-    setAccountDetails(prev => ({ ...prev, [name]: value }));
+
+    // Format phone number if it's a phone number field
+    if (name === "businessContactNumber") {
+      const formattedValue = formatPhoneNumber(value);
+      setAccountDetails((prev) => ({ ...prev, [name]: formattedValue }));
+    } else {
+      setAccountDetails((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
-  const handleSaveChanges = (e: FormEvent) => {
+  const handleSaveChanges = async (e: FormEvent) => {
     e.preventDefault();
-    // Here you would typically send data to a backend
+    setIsPending(true);
+    // 89 Orenda Rd, Brampton, ON L6W 1V7
     console.log("Saving account details:", accountDetails);
-    toast({
-      title: "Settings Saved",
-      description: "Your account details have been updated.",
-    });
+
+    try {
+      const userDocRef = doc(db, "users", userEmail);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        await updateDoc(userDocRef, {
+          phoneNumber: accountDetails.businessContactNumber,
+          address: accountDetails.businessAddress,
+          shopName: accountDetails.shopName,
+          email: accountDetails.email,
+        });
+        toast({
+          title: "Settings Saved",
+          description: "Your account details have been updated.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Error saving account details. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Error saving account details:", error);
+    } finally {
+      setIsPending(false);
+    }
   };
 
-  const handleReportSaveChanges = (e: FormEvent) => {
+  const handleReportSaveChanges = async (e: FormEvent) => {
     e.preventDefault();
-    // Here you would typically send data to a backend
-    console.log("Saving account details:", accountDetails);
-    toast({
-      title: "Settings Saved",
-      description: "Your account details have been updated.",
-    });
+    setIsSavingReportsData(true);
+    try {
+      const userDocRef = doc(db, "users", userEmail);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        await updateDoc(userDocRef, {
+          contactPerson: accountDetails.contactPersonName,
+          contactPersonPhone: accountDetails.contactPersonPhone,
+          reportEmail: accountDetails.reportEmail,
+        });
+        toast({
+          title: "Settings Saved",
+          description: "Your account details have been updated.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Error saving account details. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Error saving account details:", error);
+    } finally {
+      setIsSavingReportsData(false);
+    }
   };
-
 
   useEffect(() => {
-      const unsubscribe = auth.onAuthStateChanged(async (user) => {
-        if (!user) {
-          setShopDetails(null);
-          return;
-        }
-        const userEmail = user.email || "unknown_user";
-        const userDocRef = doc(db, "users", userEmail);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          setShopDetails(userDoc.data());
-        }
-      });
-      return () => unsubscribe();
-    }, []);
-const userEmail ="";
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        setShopDetails(null);
+        return;
+      }
+      const userEmail = user.email || "unknown_user";
+      const userDocRef = doc(db, "users", userEmail);
+      setUserEmail(userEmail);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setAccountDetails((prev) => ({
+          ...prev,
+          contactPersonName: userData.contactPerson,
+          businessContactNumber: userData.phoneNumber,
+          businessAddress: userData.address,
+          shopName: userData.shopName,
+          email: userData.email,
+          contactPersonPhone: userData.contactPersonPhone,
+          reportEmail: userData.reportEmail,
+          reportPassword: userData.reportPassword,
+        }));
+        setShopDetails(userData);
+        console.log({ userData });
+      }
+    });
+    return () => unsubscribe();
+  }, []);
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>My Account</CardTitle>
-          <CardDescription>Manage your account and business settings here.</CardDescription>
+          <CardDescription>
+            Manage your account and business settings here.
+          </CardDescription>
         </CardHeader>
         <form onSubmit={handleSaveChanges}>
           <CardContent className="space-y-6">
@@ -100,7 +220,7 @@ const userEmail ="";
                   <Label htmlFor="businessName">Business Name</Label>
                   <Input
                     id="businessName"
-                    value={shopDetails?.shopName || "Shop Name"}
+                    value={accountDetails.shopName || "Shop Name"}
                     readOnly
                     disabled
                     className="mt-1 bg-muted/50"
@@ -120,13 +240,15 @@ const userEmail ="";
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="businessContactNumberInfo">Business Contact Number</Label>
+                  <Label htmlFor="businessContactNumberInfo">
+                    Business Contact Number
+                  </Label>
                   <div className="relative mt-1">
                     <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="businessContactNumberInfo"
                       name="businessContactNumber"
-                      value={shopDetails?.phoneNumber}
+                      value={accountDetails.businessContactNumber}
                       onChange={handleInputChange}
                       className="pl-10"
                       placeholder="e.g. (555) 123-4567"
@@ -144,12 +266,12 @@ const userEmail ="";
               </h3>
               <div>
                 <Label htmlFor="businessAddress">Business Address</Label>
-                 <div className="relative mt-1">
+                <div className="relative mt-1">
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Textarea
                     id="businessAddress"
                     name="businessAddress"
-                    value={shopDetails?.address }
+                    value={accountDetails.businessAddress}
                     onChange={handleInputChange}
                     className="pl-10"
                     rows={3}
@@ -160,8 +282,9 @@ const userEmail ="";
             </div>
           </CardContent>
           <CardFooter className="border-t px-6 py-4">
-            <Button type="submit">
-              <Save className="mr-2 h-4 w-4" /> Save Changes
+            <Button type="submit" disabled={isPending}>
+              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isPending ? "Saving..." : "Save Changes"}
             </Button>
           </CardFooter>
         </form>
@@ -169,90 +292,191 @@ const userEmail ="";
 
       <Card>
         <CardHeader>
-            <h3 className="text-lg font-medium text-primary flex items-center">
-                <LockKeyhole className="mr-2 h-5 w-5" /> Manage Reports
-            </h3>
+          <h3 className="text-lg font-medium text-primary flex items-center">
+            <LockKeyhole className="mr-2 h-5 w-5" /> Manage Reports
+          </h3>
         </CardHeader>
-        
+
         <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                  <Label htmlFor="accountEmail">Account Email</Label>
-                  <div className="relative mt-1">
-                      <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                          id="accountEmail"
-                          value={shopDetails?.reportEmail }
-                          readOnly
-                          disabled
-                          className="pl-10 bg-muted/50"
-                      />
-                  </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contactPersonName">Contact Person Name</Label>
-                <div className="relative mt-1">
-                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="contactPersonName"
-                    name="contactPersonName"
-                    value={shopDetails?.contactPerson }
-                    onChange={handleInputChange}
-                    className="pl-10"
-                    placeholder="e.g. John Doe"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="space-y-2 max-w-md">
-              <Label htmlFor="manageReportsContactNumber">Contact Number</Label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="accountEmail">Account Email</Label>
               <div className="relative mt-1">
-                <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  id="manageReportsContactNumber"
-                  name="businessContactNumber" // Linked to the same state
-                  value={shopDetails?.contactPersonPhone }
-                  onChange={handleInputChange}
-                  className="pl-10"
-                  placeholder="e.g. (555) 555-5555"
+                  id="accountEmail"
+                  value={shopDetails?.reportEmail}
+                  readOnly
+                  disabled
+                  className="pl-10 bg-muted/50"
                 />
               </div>
             </div>
-            <Separator />
             <div className="space-y-2">
-                <Label htmlFor="resetReportsPasswordButton">Reports Page Password</Label>
-                <p className="text-sm text-muted-foreground">
-                    Manage access to the financial reports section.
-                </p>
-                 <Button id="resetReportsPasswordButton" variant="outline" onClick={() => setShowResetReportsPasswordAlert(true)}>
-                    Reset Reports Page Password
-                </Button>
-                <CardFooter className="border-t px-6 py-4">
-                  <Button type="submit" onClick={handleReportSaveChanges}>
-                    <Save className="mr-2 h-4 w-4" /> Save Changes
-                  </Button>
-                </CardFooter>
+              <Label htmlFor="contactPersonName">Contact Person Name</Label>
+              <div className="relative mt-1">
+                <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="contactPersonName"
+                  name="contactPersonName"
+                  value={accountDetails.contactPersonName}
+                  onChange={handleInputChange}
+                  className="pl-10"
+                  placeholder="e.g. John Doe"
+                />
+              </div>
             </div>
+          </div>
+          <div className="space-y-2 max-w-md">
+            <Label htmlFor="manageReportsContactNumber">Contact Number</Label>
+            <div className="relative mt-1">
+              <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="manageReportsContactNumber"
+                name="contactPersonPhone" // Linked to the same state
+                value={accountDetails.contactPersonPhone}
+                onChange={handleInputChange}
+                className="pl-10"
+                placeholder="e.g. (555) 555-5555"
+              />
+            </div>
+          </div>
+          <Separator />
+          <div className="space-y-2">
+            <Label htmlFor="resetReportsPasswordButton">
+              Reports Page Password
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Manage access to the financial reports section.
+            </p>
+            <Button
+              id="resetReportsPasswordButton"
+              variant="outline"
+              onClick={() => setShowResetReportsPasswordAlert(true)}
+            >
+              Reset Reports Page Password
+            </Button>
+            <CardFooter className="border-t px-6 py-4">
+              <Button
+                type="submit"
+                onClick={handleReportSaveChanges}
+                disabled={isSavingReportsData}
+              >
+                {isSavingReportsData ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" /> Save Changes
+                  </>
+                )}
+              </Button>
+            </CardFooter>
+          </div>
         </CardContent>
-        
       </Card>
 
-      <AlertDialog open={showResetReportsPasswordAlert} onOpenChange={setShowResetReportsPasswordAlert}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reports Password Information</AlertDialogTitle>
-            <AlertDialogDescription>
-              The password for the Reports page is currently 'reportspass'.
-              To change this password, the application code (specifically in <code>src/app/(app)/reports/page.tsx</code>) needs to be updated.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setShowResetReportsPasswordAlert(false)}>OK</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
+      {showResetReportsPasswordAlert && (
+        <ReportPasswordForm
+          showResetReportsPasswordAlert={showResetReportsPasswordAlert}
+          setShowResetReportsPasswordAlert={setShowResetReportsPasswordAlert}
+          userEmail={userEmail}
+        />
+      )}
     </div>
   );
 }
 
+const ReportPasswordForm = ({
+  showResetReportsPasswordAlert,
+  setShowResetReportsPasswordAlert,
+  userEmail,
+}: {
+  showResetReportsPasswordAlert: boolean;
+  setShowResetReportsPasswordAlert: (open: boolean) => void;
+  userEmail: string;
+}) => {
+  const [newPassword, setNewPassword] = useState("");
+  const [isSavingReportsData, setIsSavingReportsData] = useState(false);
+  const handleNewPasswordChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setNewPassword(e.target.value);
+  };
+
+  const { toast } = useToast();
+  const handleSave = async () => {
+    if (!newPassword) return;
+    setIsSavingReportsData(true);
+    try {
+      const userDocRef = doc(db, "users", userEmail);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        await updateDoc(userDocRef, { reportPassword: newPassword });
+        toast({
+          title: "Password Saved",
+          description: "Your password has been updated.",
+        });
+        setShowResetReportsPasswordAlert(false);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Error saving reports data.",
+        variant: "destructive",
+      });
+      console.error("Error saving reports data:", error);
+    } finally {
+      setIsSavingReportsData(false);
+    }
+  };
+
+  const disabled = isSavingReportsData || newPassword === "";
+
+  return (
+    <AlertDialog
+      open={showResetReportsPasswordAlert}
+      onOpenChange={setShowResetReportsPasswordAlert}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Change Reports Password</AlertDialogTitle>
+          <AlertDialogDescription>
+            Enter the new password for the Reports page.
+            <div className="relative mt-1">
+              <Input
+                type="password"
+                placeholder="New Password"
+                value={newPassword}
+                onChange={handleNewPasswordChange}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !disabled) {
+                    handleSave();
+                  }
+                }}
+              />
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {/* <AlertDialogContent>
+          <Input type="password" placeholder="New Password" />
+        </AlertDialogContent> */}
+        <AlertDialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setShowResetReportsPasswordAlert(false)}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={disabled}>
+            {isSavingReportsData ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};

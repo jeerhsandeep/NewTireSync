@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from 'next/navigation';
-import type { ChangeEvent, FormEvent } from 'react';
+import { useRouter } from "next/navigation";
+import type { ChangeEvent, FormEvent } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Card,
@@ -118,7 +118,7 @@ export default function ReportsPage() {
     useState("");
   const [customerSearchPopoverOpen, setCustomerSearchPopoverOpen] =
     useState(false);
-    
+
   const [
     currentCustomerCommandInputValue,
     setCurrentCustomerCommandInputValue,
@@ -130,10 +130,11 @@ export default function ReportsPage() {
   );
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [reportPassword, setReportPassword] = useState("");
   const REPORTS_ACCESS_PASSWORD = "";
   const [isReportsAuthenticated, setIsReportsAuthenticated] = useState(false);
-  const [enteredPassword, setEnteredPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [enteredPassword, setEnteredPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
     const fetchSalesData = async (userEmail: string) => {
@@ -161,10 +162,31 @@ export default function ReportsPage() {
       }
     };
 
+    const fetchUserData = async (userEmail: string) => {
+      try {
+        const userDocRef = doc(db, "users", userEmail);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          console.log({ userData });
+          setReportPassword(userData.reportPassword);
+        }
+        return null;
+      } catch (error) {
+        console.log("failed to load user data", error);
+        toast({
+          title: "Error",
+          description: "Failed to load user data.",
+          variant: "destructive",
+        });
+      }
+    };
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         const userEmail = user.email || "unknown_user";
         fetchSalesData(userEmail);
+        fetchUserData(userEmail);
       } else {
         setSalesData([]);
         toast({
@@ -270,32 +292,44 @@ export default function ReportsPage() {
     setIsConfirmModalOpen(true); // Open the confirmation modal
   };
 
- const handlePasswordSubmit = (e: FormEvent) => {
+  const handlePasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (enteredPassword === REPORTS_ACCESS_PASSWORD) {
+    if (enteredPassword === reportPassword) {
       setIsReportsAuthenticated(true);
-      setPasswordError('');
-      setEnteredPassword(''); // Clear password for security
+      setPasswordError("");
+      setEnteredPassword(""); // Clear password for security
       toast({ title: "Access Granted", description: "Loading reports..." });
     } else {
       setPasswordError("Incorrect password. Please try again.");
-      toast({ title: "Access Denied", description: "Incorrect password.", variant: "destructive" });
+      toast({
+        title: "Access Denied",
+        description: "Incorrect password.",
+        variant: "destructive",
+      });
     }
   };
 
   if (!isReportsAuthenticated) {
     return (
-      <AlertDialog open={!isReportsAuthenticated} onOpenChange={(isOpen) => {
-        if (!isOpen && !isReportsAuthenticated) { // If dialog is closed by other means (e.g. Esc key) and not authenticated
-            router.push('/appointments');
-        }
-      }}>
+      <AlertDialog
+        open={!isReportsAuthenticated}
+        onOpenChange={(isOpen) => {
+          if (!isOpen && !isReportsAuthenticated) {
+            // If dialog is closed by other means (e.g. Esc key) and not authenticated
+            router.push("/appointments");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reports Section Locked</AlertDialogTitle>
             <AlertDialogDescription>
               Please enter the password to access financial reports.
-              {passwordError && <p className="text-sm font-medium text-destructive mt-2">{passwordError}</p>}
+              {passwordError && (
+                <p className="text-sm font-medium text-destructive mt-2">
+                  {passwordError}
+                </p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <form onSubmit={handlePasswordSubmit}>
@@ -311,8 +345,12 @@ export default function ReportsPage() {
               />
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => router.push('/appointments')}>Cancel</AlertDialogCancel>
-              <AlertDialogAction type="submit"> {/* Changed Button to AlertDialogAction */}
+              <AlertDialogCancel onClick={() => router.push("/appointments")}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction type="submit">
+                {" "}
+                {/* Changed Button to AlertDialogAction */}
                 Submit
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -321,7 +359,6 @@ export default function ReportsPage() {
       </AlertDialog>
     );
   }
-
 
   const confirmDeleteSale = async () => {
     if (!saleToDelete) return;

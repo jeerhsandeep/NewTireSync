@@ -46,9 +46,13 @@ import {
   Fingerprint,
   Gauge,
   CalendarDays,
+  FilterX,
+  CalendarIcon,
+  Loader2,
 } from "lucide-react";
 import type { SaleItem, InventoryItem, SaleTransaction } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import {
   Popover,
@@ -63,6 +67,15 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -71,7 +84,14 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebaseConfig";
-import { collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+} from "firebase/firestore";
 
 // Mock inventory for item selection
 const mockInventory: InventoryItem[] = [
@@ -165,6 +185,7 @@ export default function SalesPage() {
     undefined
   );
 
+  const [isDeleting, setIsDeleting] = useState(false);
   const [openItemCombobox, setOpenItemCombobox] = useState(false);
   const [contactSearchPopoverOpen, setContactSearchPopoverOpen] =
     useState(false);
@@ -192,8 +213,13 @@ export default function SalesPage() {
     from: undefined,
     to: undefined,
   });
+  const [filterSessionQuotesDateRange, setFilterSessionQuotesDateRange] =
+    useState<DateRange | undefined>(undefined);
+
   const [customerSearchTerm, setCustomerSearchTerm] = useState("");
   const filteredSalesData = useMemo(() => {
+    const { from, to } = filterSessionQuotesDateRange || {};
+    if (!from && !to) return salesData;
     let intermediateFilteredSales = salesData;
 
     if (customerSearchTerm) {
@@ -202,7 +228,6 @@ export default function SalesPage() {
       );
     }
 
-    const { from, to } = dateRange;
     if (from || to) {
       const startDate = from ? startOfDay(from) : null;
       const endDate = to ? endOfDay(to) : null;
@@ -216,7 +241,7 @@ export default function SalesPage() {
     }
 
     return intermediateFilteredSales;
-  }, [salesData, dateRange, customerSearchTerm]);
+  }, [salesData, filterSessionQuotesDateRange, customerSearchTerm]);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -741,99 +766,16 @@ export default function SalesPage() {
     }
   };
 
-  const handlePrintInvoice = async () => {
-    if (currentSaleItems.length === 0) {
-      toast({
-        title: "Cannot Print",
-        description: "Add items to the sale first.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!paymentMethod) {
-      toast({
-        title: "Cannot Print",
-        description: "Please select a payment method before printing.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const user = auth.currentUser;
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "User is not authenticated.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const userEmail = user.email || "unknown_user";
-    const shopDetails = await fetchShopDetails(userEmail);
-
-    if (!shopDetails) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch shop details.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    let latestInvoiceNumber = 1000; // Default starting invoice number
-
-    try {
-      // Fetch the latest invoice number from Firestore
-      const userDocRef = doc(db, "users", userEmail);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        latestInvoiceNumber = userData.lastInvoiceNumber || 1000; // Use the last saved invoice number
-      }
-    } catch (error) {
-      console.error("Error fetching invoice number:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch the latest invoice number.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const saleDataForPrint = {
-      items: currentSaleItems,
-      subtotal,
-      taxAmount,
-      totalAmount,
-      customerName: customerName || "N/A",
-      contactNumber: contactNumber || "N/A",
-      customerEmail: customerEmail || "N/A",
-      carModel: carModel || "N/A",
-      vin: vin || "N/A",
-      odometer: odometer || "N/A",
-      paymentMethodDisplay: paymentMethod
-        ? paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
-        : "N/A",
-      hstRate: applyHst ? HST_RATE_VALUE : 0,
-      timestamp: selectedSaleDate || new Date(),
-      invoiceNumber: latestInvoiceNumber + 1,
-      shopName: shopDetails.shopName,
-      shopAddress: shopDetails.address,
-      shopPhoneNumber: shopDetails.phoneNumber,
-      shopEmail: shopDetails.email,
-    };
-
+  const handlePrintInvoice = (sale: SaleTransaction) => {
     const printWindow = window.open("", "_blank", "height=600,width=800");
     if (printWindow) {
       printWindow.document.write(`
         <html>
           <head>
-            <title>Invoice ${saleDataForPrint.invoiceNumber}</title>
+            <title>Invoice ${sale.id}</title>
             <style>
               body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-              .invoice-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); font-size: 16px; line-height: 24px; }
+              .quote-box { max-width: 800px; margin: auto; padding: 30px; border: 1px solid #eee; box-shadow: 0 0 10px rgba(0, 0, 0, 0.15); font-size: 16px; line-height: 24px; }
               .header { text-align: center; margin-bottom: 30px; }
               .header h1 { margin: 0 0 10px 0; font-size: 28px; color: #333; }
               .header p { margin: 2px 0; font-size: 14px; color: #555; }
@@ -854,62 +796,39 @@ export default function SalesPage() {
               .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #777; }
               @media print {
                 body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .invoice-box { box-shadow: none; border: none; margin: 0; padding: 0; }
+                .quote-box { box-shadow: none; border: none; margin: 0; padding: 0; }
                 .no-print { display: none !important; }
               }
             </style>
           </head>
           <body>
-            <div class="invoice-box">
+            <div class="quote-box">
               <div class="header">
-                <h1>${saleDataForPrint.shopName}</h1>
-              <p>${saleDataForPrint.shopAddress}</p>
-              <p>Phone: ${saleDataForPrint.shopPhoneNumber} | Email: ${
-        saleDataForPrint.shopEmail
-      }</p>
-              <p>Invoice #: ${saleDataForPrint.invoiceNumber}</p>
-                <p>Invoice Date: ${format(
-                  saleDataForPrint.timestamp,
-                  "PPP"
-                )}</p>
+                <h1>TireSync</h1>
+                <p>123 Performance Ave, Gearsville, ON M1S 2T3</p>
+                <p>Phone: (555) 123-4567 | Email: service@tiresync.example</p>
+                <h2>INVOICE</h2>
+                <p>Invoice #: ${sale.id}</p>
+                <p>Date: ${format(new Date(sale.timestamp), "PPP")}</p>
               </div>
 
               <div class="details-section">
                 <div>
-                  <h2>Bill To:</h2>
-                  <p><strong>Name:</strong> ${saleDataForPrint.customerName}</p>
+                  <h2>Invoice For:</h2>
+                  <p><strong>Name:</strong> ${sale.customerName || "N/A"}</p>
                   <p><strong>Contact:</strong> ${
-                    saleDataForPrint.contactNumber
+                    sale.contactNumber || "N/A"
                   }</p>
                   ${
-                    saleDataForPrint.customerEmail &&
-                    saleDataForPrint.customerEmail !== "N/A"
-                      ? `<p><strong>Email:</strong> ${saleDataForPrint.customerEmail}</p>`
+                    sale.customerEmail
+                      ? `<p><strong>Email:</strong> ${sale.customerEmail}</p>`
                       : ""
                   }
                   ${
-                    saleDataForPrint.carModel &&
-                    saleDataForPrint.carModel !== "N/A"
-                      ? `<p><strong>Vehicle:</strong> ${saleDataForPrint.carModel}</p>`
+                    sale.carModel
+                      ? `<p><strong>Vehicle:</strong> ${sale.carModel}</p>`
                       : ""
                   }
-                  ${
-                    saleDataForPrint.vin && saleDataForPrint.vin !== "N/A"
-                      ? `<p><strong>VIN:</strong> ${saleDataForPrint.vin}</p>`
-                      : ""
-                  }
-                  ${
-                    saleDataForPrint.odometer &&
-                    saleDataForPrint.odometer !== "N/A"
-                      ? `<p><strong>Odometer:</strong> ${saleDataForPrint.odometer}</p>`
-                      : ""
-                  }
-                </div>
-                <div>
-                  <h2>Payment Details:</h2>
-                  <p><strong>Payment Method:</strong> ${
-                    saleDataForPrint.paymentMethodDisplay
-                  }</p>
                 </div>
               </div>
 
@@ -923,7 +842,7 @@ export default function SalesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  ${saleDataForPrint.items
+                  ${sale.items
                     .map(
                       (item) => `
                     <tr>
@@ -944,34 +863,30 @@ export default function SalesPage() {
                 <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
                 <tr>
                   <td class="label">Subtotal:</td>
-                  <td class="text-right">$${saleDataForPrint.subtotal.toFixed(
-                    2
-                  )}</td>
+                  <td class="text-right">$${sale.subtotal.toFixed(2)}</td>
                 </tr>
                 ${
-                  saleDataForPrint.hstRate > 0
+                  sale.taxAmount > 0
                     ? `
                 <tr>
-                  <td class="label">Tax (${(
-                    saleDataForPrint.hstRate * 100
-                  ).toFixed(0)}%):</td>
-                  <td class="text-right">$${saleDataForPrint.taxAmount.toFixed(
-                    2
-                  )}</td>
+                  <td class="label">Tax (${(sale.hstRate * 100).toFixed(
+                    0
+                  )}%):</td>
+                  <td class="text-right">$${sale.hstRate.toFixed(2)}</td>
                 </tr>
                 `
                     : ""
                 }
                 <tr>
                   <td class="label grand-total">Grand Total:</td>
-                  <td class="text-right grand-total">$${saleDataForPrint.totalAmount.toFixed(
+                  <td class="text-right grand-total">$${sale.totalAmount.toFixed(
                     2
                   )}</td>
                 </tr>
               </table>
 
               <div class="footer">
-                <p>Thank you for your business!</p>
+                <p>This invoice is valid for 30 days. Prices are subject to change.</p>
                 <p class="no-print" style="margin-top: 20px;"><button onclick="window.print();">Print this invoice</button> or close this window.</p>
               </div>
             </div>
@@ -1035,9 +950,38 @@ export default function SalesPage() {
     );
     setCustomerSearchPopoverOpen(false);
   };
-  const handleDeleteSale = (sale: SaleTransaction) => {
-    setSaleToDelete(sale);
-    setIsConfirmModalOpen(true); // Open the confirmation modal
+
+  const handleDeleteSale = async () => {
+    setIsDeleting(true);
+    const userEmail = auth.currentUser?.email;
+    if (!saleToDelete || !userEmail) return;
+
+    console.log({ salesData });
+    try {
+      await deleteDoc(
+        doc(db, "sales", userEmail, "userSales", saleToDelete?.id)
+      );
+      setSalesData((prevSales) =>
+        prevSales.filter((s) => s.id !== saleToDelete?.id)
+      );
+      setSaleToDelete(null);
+      toast({
+        title: "Quote Deleted",
+        description: `Sale ${saleToDelete?.id.substring(0, 10)}... for ${
+          saleToDelete?.customerName || "N/A"
+        } has been removed.`,
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error deleting quote:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete quote.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -1723,10 +1667,74 @@ export default function SalesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Sales Transactions</CardTitle>
-          <CardDescription>
-            Showing transactions for the selected filters.
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle>Recent Sales Transactions</CardTitle>
+              <CardDescription>
+                Showing transactions for the selected filters.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn(
+                      "w-full sm:w-[300px] justify-start text-left font-normal",
+                      !filterSessionQuotesDateRange && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {filterSessionQuotesDateRange?.from ? (
+                      filterSessionQuotesDateRange.to ? (
+                        <>
+                          {format(
+                            filterSessionQuotesDateRange.from,
+                            "LLL dd, y"
+                          )}{" "}
+                          -{" "}
+                          {format(filterSessionQuotesDateRange.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(filterSessionQuotesDateRange.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Filter by Date Range...</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={filterSessionQuotesDateRange?.from}
+                    selected={filterSessionQuotesDateRange}
+                    onSelect={setFilterSessionQuotesDateRange}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+              {(filterSessionQuotesDateRange?.from ||
+                filterSessionQuotesDateRange?.to) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setFilterSessionQuotesDateRange(undefined)}
+                      aria-label="Clear date filter"
+                    >
+                      <FilterX className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Clear Date Range Filter</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -1810,7 +1818,7 @@ export default function SalesPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDeleteSale(sale)}
+                              onClick={() => setSaleToDelete(sale)}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -1840,6 +1848,53 @@ export default function SalesPage() {
           </CardFooter>
         )}
       </Card>
+      <DeleteConfirmationDialog
+        open={saleToDelete !== null}
+        onOpenChange={() => setSaleToDelete(null)}
+        handleDeleteSale={handleDeleteSale}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }
+
+const DeleteConfirmationDialog = ({
+  open,
+  onOpenChange,
+  handleDeleteSale,
+  isDeleting,
+}: {
+  open: boolean;
+  onOpenChange: () => void;
+  handleDeleteSale: () => void;
+  isDeleting: boolean;
+}) => {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Sale</DialogTitle>
+        </DialogHeader>
+        <DialogDescription>
+          Are you sure you want to delete this sale?
+        </DialogDescription>
+        <DialogFooter>
+          <Button
+            variant="destructive"
+            onClick={handleDeleteSale}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Delete"
+            )}
+          </Button>
+          <Button variant="outline" onClick={onOpenChange}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
