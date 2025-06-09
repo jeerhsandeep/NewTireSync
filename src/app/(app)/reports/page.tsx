@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from 'next/navigation';
-import type { ChangeEvent, FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
+import type { ChangeEvent, FormEvent } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Card,
@@ -118,7 +118,7 @@ export default function ReportsPage() {
     useState("");
   const [customerSearchPopoverOpen, setCustomerSearchPopoverOpen] =
     useState(false);
-    
+
   const [
     currentCustomerCommandInputValue,
     setCurrentCustomerCommandInputValue,
@@ -130,10 +130,13 @@ export default function ReportsPage() {
   );
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const REPORTS_ACCESS_PASSWORD = "";
+  const [reportPassword, setReportPassword] = useState("");
+  const REPORTS_ACCESS_PASSWORD = "12345678";
   const [isReportsAuthenticated, setIsReportsAuthenticated] = useState(false);
-  const [enteredPassword, setEnteredPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [enteredPassword, setEnteredPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+
+  const hasJustAuthenticated = useRef(false);
 
   useEffect(() => {
     const fetchSalesData = async (userEmail: string) => {
@@ -161,10 +164,31 @@ export default function ReportsPage() {
       }
     };
 
+    const fetchUserData = async (userEmail: string) => {
+      try {
+        const userDocRef = doc(db, "users", userEmail);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          console.log({ userData });
+          setReportPassword(userData.reportPassword);
+        }
+        return null;
+      } catch (error) {
+        console.log("failed to load user data", error);
+        toast({
+          title: "Error",
+          description: "Failed to load user data.",
+          variant: "destructive",
+        });
+      }
+    };
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         const userEmail = user.email || "unknown_user";
         fetchSalesData(userEmail);
+        fetchUserData(userEmail);
       } else {
         setSalesData([]);
         toast({
@@ -270,32 +294,57 @@ export default function ReportsPage() {
     setIsConfirmModalOpen(true); // Open the confirmation modal
   };
 
- const handlePasswordSubmit = (e: FormEvent) => {
+  const handlePasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (enteredPassword === REPORTS_ACCESS_PASSWORD) {
+    setPasswordError(''); 
+    if (enteredPassword === reportPassword) {
+      hasJustAuthenticated.current = true; // Signal that authentication was successful
       setIsReportsAuthenticated(true);
-      setPasswordError('');
-      setEnteredPassword(''); // Clear password for security
+      setEnteredPassword(''); 
       toast({ title: "Access Granted", description: "Loading reports..." });
     } else {
       setPasswordError("Incorrect password. Please try again.");
       toast({ title: "Access Denied", description: "Incorrect password.", variant: "destructive" });
+      hasJustAuthenticated.current = false; 
+    }
+  };
+
+   const handleDialogOnOpenChange = (open: boolean) => {
+    if (!open) { // Dialog is attempting to close
+      if (hasJustAuthenticated.current) {
+        // If we just successfully authenticated, the dialog is closing because
+        // isReportsAuthenticated will become true in the next render.
+        // Reset the ref and do NOT navigate.
+        hasJustAuthenticated.current = false;
+      } else if (!isReportsAuthenticated) {
+        // If dialog is closing for other reasons (Esc, overlay, Cancel button was clicked through other means)
+        // AND user is NOT authenticated, then navigate away.
+        //router.push('/appointments');
+      }
     }
   };
 
   if (!isReportsAuthenticated) {
     return (
-      <AlertDialog open={!isReportsAuthenticated} onOpenChange={(isOpen) => {
-        if (!isOpen && !isReportsAuthenticated) { // If dialog is closed by other means (e.g. Esc key) and not authenticated
-            router.push('/appointments');
-        }
-      }}>
+      <AlertDialog
+        open={!isReportsAuthenticated}
+        onOpenChange={(isOpen) => {
+          if (!isOpen && !isReportsAuthenticated) {
+            // If dialog is closed by other means (e.g. Esc key) and not authenticated
+            //router.push("/appointments");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reports Section Locked</AlertDialogTitle>
             <AlertDialogDescription>
               Please enter the password to access financial reports.
-              {passwordError && <p className="text-sm font-medium text-destructive mt-2">{passwordError}</p>}
+              {passwordError && (
+                <p className="text-sm font-medium text-destructive mt-2">
+                  {passwordError}
+                </p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <form onSubmit={handlePasswordSubmit}>
@@ -311,8 +360,12 @@ export default function ReportsPage() {
               />
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => router.push('/appointments')}>Cancel</AlertDialogCancel>
-              <AlertDialogAction type="submit"> {/* Changed Button to AlertDialogAction */}
+              <AlertDialogCancel onClick={() => router.push("/appointments")}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction type="submit">
+                {" "}
+                {/* Changed Button to AlertDialogAction */}
                 Submit
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -321,7 +374,6 @@ export default function ReportsPage() {
       </AlertDialog>
     );
   }
-
 
   const confirmDeleteSale = async () => {
     if (!saleToDelete) return;
