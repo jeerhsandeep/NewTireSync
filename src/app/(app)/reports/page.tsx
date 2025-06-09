@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { ChangeEvent, FormEvent } from "react";
 import { Input } from "@/components/ui/input";
@@ -131,10 +131,12 @@ export default function ReportsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [reportPassword, setReportPassword] = useState("");
-  const REPORTS_ACCESS_PASSWORD = "";
+  const REPORTS_ACCESS_PASSWORD = "12345678";
   const [isReportsAuthenticated, setIsReportsAuthenticated] = useState(false);
   const [enteredPassword, setEnteredPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
+
+  const hasJustAuthenticated = useRef(false);
 
   useEffect(() => {
     const fetchSalesData = async (userEmail: string) => {
@@ -294,18 +296,31 @@ export default function ReportsPage() {
 
   const handlePasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
+    setPasswordError(''); 
     if (enteredPassword === reportPassword) {
+      hasJustAuthenticated.current = true; // Signal that authentication was successful
       setIsReportsAuthenticated(true);
-      setPasswordError("");
-      setEnteredPassword(""); // Clear password for security
+      setEnteredPassword(''); 
       toast({ title: "Access Granted", description: "Loading reports..." });
     } else {
       setPasswordError("Incorrect password. Please try again.");
-      toast({
-        title: "Access Denied",
-        description: "Incorrect password.",
-        variant: "destructive",
-      });
+      toast({ title: "Access Denied", description: "Incorrect password.", variant: "destructive" });
+      hasJustAuthenticated.current = false; 
+    }
+  };
+
+   const handleDialogOnOpenChange = (open: boolean) => {
+    if (!open) { // Dialog is attempting to close
+      if (hasJustAuthenticated.current) {
+        // If we just successfully authenticated, the dialog is closing because
+        // isReportsAuthenticated will become true in the next render.
+        // Reset the ref and do NOT navigate.
+        hasJustAuthenticated.current = false;
+      } else if (!isReportsAuthenticated) {
+        // If dialog is closing for other reasons (Esc, overlay, Cancel button was clicked through other means)
+        // AND user is NOT authenticated, then navigate away.
+        //router.push('/appointments');
+      }
     }
   };
 
@@ -316,7 +331,7 @@ export default function ReportsPage() {
         onOpenChange={(isOpen) => {
           if (!isOpen && !isReportsAuthenticated) {
             // If dialog is closed by other means (e.g. Esc key) and not authenticated
-            router.push("/appointments");
+            //router.push("/appointments");
           }
         }}
       >
