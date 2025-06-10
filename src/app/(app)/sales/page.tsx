@@ -804,17 +804,16 @@ export default function SalesPage() {
           <body>
             <div class="quote-box">
               <div class="header">
-                <h1>TireSync</h1>
-                <p>123 Performance Ave, Gearsville, ON M1S 2T3</p>
-                <p>Phone: (555) 123-4567 | Email: service@tiresync.example</p>
-                <h2>INVOICE</h2>
+                <h1>Grab Tires</h1>
+                <p>89 Orenda Rd, Brampton, ON L6W 1V7</p>
+                <p>Phone: (647) 526-2119 | Email: info@grabtires.com</p>
                 <p>Invoice #: ${sale.id}</p>
                 <p>Date: ${format(new Date(sale.timestamp), "PPP")}</p>
               </div>
 
               <div class="details-section">
                 <div>
-                  <h2>Invoice For:</h2>
+                  <h2>Bill To:</h2>
                   <p><strong>Name:</strong> ${sale.customerName || "N/A"}</p>
                   <p><strong>Contact:</strong> ${
                     sale.contactNumber || "N/A"
@@ -830,6 +829,15 @@ export default function SalesPage() {
                       : ""
                   }
                 </div>
+                   <div>
+                <h2>Payment Details:</h2>
+                <p><strong>Payment Method:</strong> ${
+                  sale.paymentMethod
+                    ? sale.paymentMethod.charAt(0).toUpperCase() +
+                      sale.paymentMethod.slice(1)
+                    : "N/A"
+                }</p>
+              </div>
               </div>
 
               <table class="items-table">

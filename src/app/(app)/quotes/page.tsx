@@ -38,7 +38,11 @@ import {
   Printer,
   FileOutput,
   Loader2,
+  CreditCard,
+  Landmark,
 } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
 import type { QuoteItem, InventoryItem, Quote, SaleTransaction } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -1668,47 +1672,6 @@ export default function QuotesPage() {
   );
 }
 
-const DeleteConfirmationDialog = ({
-  open,
-  onOpenChange,
-  handleDeleteQuote,
-  isDeleting,
-}: {
-  open: boolean;
-  onOpenChange: () => void;
-  handleDeleteQuote: () => void;
-  isDeleting: boolean;
-}) => {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete Quote</DialogTitle>
-        </DialogHeader>
-        <DialogDescription>
-          Are you sure you want to delete this quote?
-        </DialogDescription>
-        <DialogFooter>
-          <Button
-            variant="destructive"
-            onClick={handleDeleteQuote}
-            disabled={isDeleting}
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              "Delete"
-            )}
-          </Button>
-          <Button variant="outline" onClick={onOpenChange}>
-            Cancel
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
 const TableRows = ({
   quote,
   setQuoteToEdit,
@@ -1723,9 +1686,14 @@ const TableRows = ({
   setUserQuotes: React.Dispatch<React.SetStateAction<Quote[]>>;
 }) => {
   const [isConvertingToInvoice, setIsConvertingToInvoice] = useState(false);
+  const [openPaymentModeModal, setOpenPaymentModeModal] = useState(false);
+
   const { toast } = useToast();
 
-  const handleConvertToInvoice = async (quote: Quote) => {
+  const handleConvertToInvoice = async (
+    quote: Quote,
+    paymentMethod: "card" | "cash" | ""
+  ) => {
     const userEmail = auth.currentUser?.email;
     if (!userEmail) return;
 
@@ -1746,7 +1714,7 @@ const TableRows = ({
         carModel: quote.carModel || "N/A",
         vin: "N/A",
         odometer: "N/A",
-        paymentMethod: "N/A",
+        paymentMethod,
         hstRate: quote.taxRateApplied,
         notes: quote.notes || "N/A",
         invoiceNumber: 0,
@@ -1854,7 +1822,9 @@ const TableRows = ({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => handleConvertToInvoice(quote)}
+              onClick={() => {
+                setOpenPaymentModeModal(true);
+              }}
               disabled={isConvertingToInvoice}
             >
               {isConvertingToInvoice ? (
@@ -1885,6 +1855,123 @@ const TableRows = ({
           </TooltipContent>
         </Tooltip>
       </TableCell>
+      {openPaymentModeModal && (
+        <PaymentModeModal
+          open={openPaymentModeModal}
+          onOpenChange={setOpenPaymentModeModal}
+          handleConvertToInvoice={handleConvertToInvoice}
+          quote={quote}
+          isConvertingToInvoice={isConvertingToInvoice}
+        />
+      )}
     </TableRow>
+  );
+};
+
+const PaymentModeModal = ({
+  open,
+  onOpenChange,
+  handleConvertToInvoice,
+  quote,
+  isConvertingToInvoice,
+}: {
+  open: boolean;
+  onOpenChange: React.Dispatch<React.SetStateAction<boolean>>;
+  handleConvertToInvoice: (
+    quote: Quote,
+    paymentMethod: "card" | "cash" | ""
+  ) => Promise<void>;
+  quote: Quote;
+  isConvertingToInvoice: boolean;
+}) => {
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "cash" | "">("");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Payment Mode</DialogTitle>
+        </DialogHeader>
+        <div>
+          <RadioGroup
+            value={paymentMethod}
+            onValueChange={(value) =>
+              setPaymentMethod(value as "card" | "cash" | "")
+            }
+            className="flex gap-4"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="card" id="card" />
+              <Label htmlFor="card" className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4" /> Card
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="cash" id="cash" />
+              <Label htmlFor="cash" className="flex items-center gap-2">
+                <Landmark className="h-4 w-4" /> Cash
+              </Label>
+            </div>
+          </RadioGroup>
+        </div>
+        <DialogFooter>
+          {paymentMethod !== "" && (
+            <Button
+              onClick={() => {
+                handleConvertToInvoice(quote, paymentMethod);
+              }}
+              disabled={isConvertingToInvoice}
+            >
+              {isConvertingToInvoice ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Convert to Invoice"
+              )}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const DeleteConfirmationDialog = ({
+  open,
+  onOpenChange,
+  handleDeleteQuote,
+  isDeleting,
+}: {
+  open: boolean;
+  onOpenChange: () => void;
+  handleDeleteQuote: () => void;
+  isDeleting: boolean;
+}) => {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Quote</DialogTitle>
+        </DialogHeader>
+        <DialogDescription>
+          Are you sure you want to delete this quote?
+        </DialogDescription>
+        <DialogFooter>
+          <Button
+            variant="destructive"
+            onClick={handleDeleteQuote}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Delete"
+            )}
+          </Button>
+          <Button variant="outline" onClick={onOpenChange}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
