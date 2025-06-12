@@ -203,6 +203,12 @@ export default function SalesPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [customers, setCustomers] = useState<MockCustomer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [userData, setUserData] = useState<{
+    shopName: string;
+    address: string;
+    phoneNumber: string;
+    email: string;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [invoiceNumber, setInvoiceNumber] = useState(1000); // Default starting invoice number
   // const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({
@@ -273,6 +279,20 @@ export default function SalesPage() {
           ...doc.data(),
         })) as InventoryItem[];
         setInventory(inventoryData);
+
+        const userDocRef = doc(db, "users", userEmail);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserData(
+            userData as {
+              shopName: string;
+              address: string;
+              phoneNumber: string;
+              email: string;
+            }
+          );
+        }
 
         const salesCollection = collection(db, "sales", userEmail, "userSales");
         const querySnapshot = await getDocs(salesCollection);
@@ -804,10 +824,12 @@ export default function SalesPage() {
           <body>
             <div class="quote-box">
               <div class="header">
-                <h1>Grab Tires</h1>
-                <p>89 Orenda Rd, Brampton, ON L6W 1V7</p>
-                <p>Phone: (647) 526-2119 | Email: info@grabtires.com</p>
-                <p>Invoice #: ${sale.id}</p>
+                <h1>${userData?.shopName || "N/A"}</h1>
+                <p>${userData?.address || "N/A"}</p>
+                <p>Phone: ${userData?.phoneNumber || "N/A"} | Email: ${
+        userData?.email || "N/A"
+      }</p>
+                <p>Invoice #: ${sale.invoiceNumber}</p>
                 <p>Date: ${format(new Date(sale.timestamp), "PPP")}</p>
               </div>
 
